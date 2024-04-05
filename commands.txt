@@ -1,0 +1,46 @@
+sudo vi /etc/apt/sources.list # Везде добавить non-free
+sudo apt update -y && sudo apt upgrade -y
+sudo reboot
+sudo apt install -y nala
+sudo nala install -y xorg xinput xorg-dev xdotool dbus-x11 sxhkd
+sudo reboot
+sudo nala install -y python3-pip python3-pillow python3.11-venv
+sudo reboot
+sudo nala install -y numlockx rofi dunst libnotify-bin picom dmenu polybar
+sudo nala install -y meson dh-autoreconf libxcb-keysyms1-dev libpango1.0-dev libxcb-util0-dev xcb libxcb-icccm4-dev libyajl-dev libev-dev libxcb-xkb-dev libxcb-cursor-dev libxkbcommon-dev libxcb-xinerama0-dev libxkbcommon-x11-dev libstartup-notification0-dev libxcb-randr0-dev libxcb-xrm-dev libxcb-shape0-dev i3status
+sudo nala install -y xinit
+sudo nala install -y xdg-utils xdg-user-dirs
+echo 'en_US' > ~/.config/user-dirs.locale
+LC_ALL=en_US xdg-user-dirs-update --force
+sudo reboot
+sudo nala install -y vim mc htop neofetch
+sudo nala install -y git
+sudo nala install -y qt5ct arandr xclip
+sudo nala install -y konsole
+sudo nala install -y flameshot
+sudo nala install -y unzip file-roller
+sudo nala install -y mousepad
+sudo nala install -y pulseaudio alsa-utils pavucontrol volumeicon-alsa
+sudo nala install -y network-manager-gnome gnome-disk-utility bleachbit
+sudo nala install -y exa
+sudo nala install -y viewnior sxiv ueberzug
+sudo nala install -y mpv vlc
+sudo nala install -y galculator
+sudo nala install -y zathura
+sudo nala install -y gettext cmake curl wget
+git clone https://github.com/Airblader/i3 i3-gaps
+cd i3-gups
+mkdir -p build && cd build
+meson --prefix /usr/local
+ninja
+sudo ninja install
+sudo reboot
+nala search -n 'font.*ubuntu'
+sudo nala install -y fonts-ubuntu
+sudo nala install -y fonts-ubuntu-console
+sudo nala install -y fonts-ubuntu-title
+sudo nala install jq
+cd Downloads
+wget https://repo.yandex.ru/yandex-browser/deb/pool/main/y/yandex-browser-stable/yandex-browser-stable_24.1.1.940-1_amd64.deb
+sudo dpkg -i yandex-browser-stable_24.1.1.940-1_amd64.deb
+sudo apt install -f -y
