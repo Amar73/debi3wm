@@ -1,22 +1,40 @@
+i3 in Debian
+
+для работы i3 требуется X-сервер, и Wayland его не поддерживает. Он доступен в виде метапакета, включающего i3-wm, i3lock, i3status, dunst и suckless-tools.
+sudo apt install i3
+
+i3-gaps Support
+
+i3-gaps был объединен с i3 в версии 4.22, которая доступна в Debian 12 (bookworm). Поскольку по умолчанию gaps отключены, их необходимо добавить с помощью:
+Пример
+vim ~/.config/i3/config
+for window [class="^.*"] border pixel 5
+gaps inner 10
+gaps outer 5
+
 sudo vi /etc/apt/sources.list # Везде добавить non-free
 sudo apt update -y && sudo apt upgrade -y
 sudo reboot
 sudo apt install -y nala
-sudo nala install -y xorg xinput xorg-dev xdotool dbus-x11 sxhkd
-sudo reboot
-sudo nala install -y python3-pip python3-pillow python3.11-venv
-sudo reboot
-sudo nala install -y numlockx rofi dunst libnotify-bin picom dmenu polybar
-sudo nala install -y meson dh-autoreconf libxcb-keysyms1-dev libpango1.0-dev libxcb-util0-dev xcb libxcb-icccm4-dev libyajl-dev libev-dev libxcb-xkb-dev libxcb-cursor-dev libxkbcommon-dev libxcb-xinerama0-dev libxkbcommon-x11-dev libstartup-notification0-dev libxcb-randr0-dev libxcb-xrm-dev libxcb-shape0-dev i3status
-sudo nala install -y xinit
+sudo nala install -y tmux
+sudo nala install -y git vim mc konsole wget curl arandr
 sudo nala install -y xdg-utils xdg-user-dirs
 echo 'en_US' > ~/.config/user-dirs.locale
 LC_ALL=en_US xdg-user-dirs-update --force
+sudo apt install xorg lightdm lightdm-gtk-greeter i3 polybar rofi
+sudo systemctl enable lightdm.service
 sudo reboot
-sudo nala install -y vim mc htop neofetch
-sudo nala install -y git
-sudo nala install -y qt5ct arandr xclip
-sudo nala install -y konsole
+mkdir Amar73 && cd Amar73
+git clone https://github.com/Amar73/debi3wm.git
+#sudo nala install -y xorg xinput xorg-dev xdotool dbus-x11 sxhkd
+#sudo reboot
+#sudo nala install -y python3-pip python3-pillow python3.11-venv
+#sudo reboot
+#sudo nala install -y numlockx dunst libnotify-bin picom dmenu
+#sudo nala install -y meson dh-autoreconf libxcb-keysyms1-dev libpango1.0-dev libxcb-util0-dev xcb #libxcb-icccm4-dev libyajl-dev libev-dev libxcb-xkb-dev libxcb-cursor-dev libxkbcommon-dev libxcb-#xinerama0-dev libxkbcommon-x11-dev libstartup-notification0-dev libxcb-randr0-dev libxcb-xrm-dev #libxcb-shape0-dev
+#sudo nala install -y xinit
+sudo nala install -y htop neofetch
+sudo nala install -y qt5ct xclip
 sudo nala install -y flameshot
 sudo nala install -y unzip file-roller
 sudo nala install -y mousepad
@@ -27,14 +45,15 @@ sudo nala install -y viewnior sxiv ueberzug
 sudo nala install -y mpv vlc
 sudo nala install -y galculator
 sudo nala install -y zathura
-sudo nala install -y gettext cmake curl wget
-git clone https://github.com/Airblader/i3 i3-gaps
-cd i3-gups
-mkdir -p build && cd build
-meson --prefix /usr/local
-ninja
-sudo ninja install
-sudo reboot
+#sudo nala install -y gettext cmake
+#git clone https://github.com/Airblader/i3 i3-gaps
+#cd i3-gups
+#mkdir -p build && cd build
+#meson --prefix /usr/local
+#ninja
+#sudo ninja install
+#sudo reboot
+
 nala search -n 'font.*ubuntu'
 sudo nala install -y fonts-ubuntu
 sudo nala install -y fonts-ubuntu-console
@@ -44,3 +63,24 @@ cd Downloads
 wget https://repo.yandex.ru/yandex-browser/deb/pool/main/y/yandex-browser-stable/yandex-browser-stable_24.1.1.940-1_amd64.deb
 sudo dpkg -i yandex-browser-stable_24.1.1.940-1_amd64.deb
 sudo apt install -f -y
+X File Explorer (XFE)
+
+mkdir ~/deb
+Скачать с сайта http://roland65.free.fr/xfe/index.php?page=download в директорию ~/deb
+cd ~/deb
+sudo nala install -y libfox
+sudo dpkg -i (xfe_1.46.1-lrb_amd64.deb указывается имя скачанного пакета)
+
+# Brave-Browser
+
+sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
+
+echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main"|sudo tee /etc/apt/sources.list.d/brave-browser-release.list
+
+sudo nala update
+
+sudo nala install -y brave-browser
+# Install Libre Office
+http://libreoffice-mirror.rbc.ru/pub/libreoffice/libreoffice/stable/24.2.2/deb/x86_64/LibreOffice_24.2.2_Linux_x86-64_deb.tar.gz
+http://libreoffice-mirror.rbc.ru/pub/libreoffice/libreoffice/stable/24.2.2/deb/x86_64/LibreOffice_24.2.2_Linux_x86-64_deb_langpack_ru.tar.gz
+http://libreoffice-mirror.rbc.ru/pub/libreoffice/libreoffice/stable/24.2.2/deb/x86_64/LibreOffice_24.2.2_Linux_x86-64_deb_helppack_ru.tar.gz
