@@ -15,72 +15,137 @@ gaps outer 5
 sudo vi /etc/apt/sources.list # Везде добавить non-free
 sudo apt update -y && sudo apt upgrade -y
 sudo reboot
+
+Настройка Мониторов
+
+xrandr --output HDMI-1 --auto --right-of DVI-I-1
+xrandr --output HDMI-1 --primary --mode 1920x1080  --output DVI-I-1 --mode 1920x1080  --right-of HDMI-1
+xrandr --output DVI-I-1 --primary --mode 2560x1600 --output HDMI-1 --mode 1920x1080 --right-of DVI-I-1
+xrandr --output DP-2 --primary --mode 1920x1080 --output DP-1 --mode 1920x1080 --left-of DP-2 --output DP-3 --mode 1920x1080 --right-of DP-2
+----------------------------------------------------------
+
+Определение клавиш
+
+xev -event keyboard
+---
+mkdir Amar73 && cd Amar73
+git clone https://github.com/Amar73/debi3wm.git
+----------------------------------------------------------------------
 sudo apt install -y nala
-sudo nala install -y tmux
-sudo nala install -y git vim mc konsole wget curl arandr
+mkdir .config
+sudo nala install -y git vim mc ranger alacritty curl gvfs-backends unzip
+
+# Create folders in user directory (eg. Documents,Downloads,etc.)
 sudo nala install -y xdg-utils xdg-user-dirs
 echo 'en_US' > ~/.config/user-dirs.locale
 LC_ALL=en_US xdg-user-dirs-update --force
-sudo apt install xorg lightdm lightdm-gtk-greeter i3 polybar rofi
-sudo systemctl enable lightdm.service
-sudo reboot
-mkdir Amar73 && cd Amar73
-git clone https://github.com/Amar73/debi3wm.git
-#sudo nala install -y xorg xinput xorg-dev xdotool dbus-x11 sxhkd
-#sudo reboot
-#sudo nala install -y python3-pip python3-pillow python3.11-venv
-#sudo reboot
-#sudo nala install -y numlockx dunst libnotify-bin picom dmenu
-#sudo nala install -y meson dh-autoreconf libxcb-keysyms1-dev libpango1.0-dev libxcb-util0-dev xcb #libxcb-icccm4-dev libyajl-dev libev-dev libxcb-xkb-dev libxcb-cursor-dev libxkbcommon-dev libxcb-#xinerama0-dev libxkbcommon-x11-dev libstartup-notification0-dev libxcb-randr0-dev libxcb-xrm-dev #libxcb-shape0-dev
-#sudo nala install -y xinit
-sudo nala install -y htop neofetch
-sudo nala install -y qt5ct xclip
-sudo nala install -y flameshot
-sudo nala install -y unzip file-roller
-sudo nala install -y mousepad
-sudo nala install -y pulseaudio alsa-utils pavucontrol volumeicon-alsa
-sudo nala install -y network-manager-gnome gnome-disk-utility bleachbit
-sudo nala install -y exa
-sudo nala install -y viewnior sxiv ueberzug
-sudo nala install -y mpv vlc
-sudo nala install -y galculator
-sudo nala install -y zathura
-#sudo nala install -y gettext cmake
-#git clone https://github.com/Airblader/i3 i3-gaps
-#cd i3-gups
-#mkdir -p build && cd build
-#meson --prefix /usr/local
-#ninja
-#sudo ninja install
-#sudo reboot
 
-nala search -n 'font.*ubuntu'
-sudo nala install -y fonts-ubuntu
-sudo nala install -y fonts-ubuntu-console
-sudo nala install -y fonts-ubuntu-title
-sudo nala install jq
+# xorg display server installation
+sudo nala install -y xorg arandr numlockx xinput xinit xclip
+sudo nala install -y xdotool dbus-x11 sxhkd libnotify-bin wmctrl libnotify-dev
+sudo shutdown -r now
+
+# Install X11 Window Managers
+sudo nala install -y i3 polybar rofi picom feh
+
+# # Sound packages & jq
+sudo nala install pulseaudio alsa-utils pavucontrol volumeicon-alsa pamixer jq
+
+# Monitor Settings
+echo 'xrandr --output DP-2 --primary --mode 1920x1080 --output DP-1 --mode 1920x1080 --left-of DP-2 --output DP-3 --mode 1920x1080 --right-of DP-2' > ~/.xsessionrc
+sudo shutdown -r now
+
+# Packages needed for window manager installation
+sudo apt install -y dunst libnotify-bin unzip wmctrl xdotool libnotify-dev
+
+# Networking etc
+sudo nala install -y network-manager network-manager-gnome gnome-disk-utility
+
+mkdir ~/.config/polybar
+cp /usr/share/doc/polybar/examples/config.ini ~/.config/polybar/
+vim ~/.config/polybar/launch.sh
+chmod +x ~/.config/polybar/launch.sh
+#sudo nala install -y firefox-esr
+
+# Fonts and icons for now
+#nala search -n 'font.*ubuntu'
+sudo nala install -y fonts-recommended fonts-ubuntu fonts-ubuntu-console fonts-ubuntu-title fonts-font-awesome fonts-roboto fonts-firacode fonts-terminus
+sudo nala install -y materia-gtk-theme papirus-icon-theme lxappearance
+
+# EXA installation
+# replace ls command in .bashrc file with line below
+# alias ls='exa -al --long --header --color=always --group-directories-first'
+sudo apt install -y exa
+
+# Geany Text Editor, text editor, markdown editor
+# sudo apt install -y geany
+# sudo apt install -y geany-plugin-addons geany-plugin-git-changebar geany-plugin-overview geany-plugin-spellcheck geany-plugin-treebrowser geany-plugin-vimode
+# sudo apt install -y geany-plugins \ # all plugins
+# sudo apt install -y mousepad ghostwriter
+# sudo apt install -y l3afpad
+
+
+sudo mkdir /media/home2
+sudo mount /dev/sdb1 /media/home2
+ls /dev/disk/by-uuid/
+sudo vim /etc/fstab
+/dev/disk/by-uuid/4fdb8402-4aa0-4d4b-9ba1-db200c0b2c33 /media/home2 auto nosuid,nodev,nofail,x-gvfs-show 0 0
+/dev/disk/by-uuid/da84b23d-b243-428b-aaa9-59f104d51346/media/home2 auto nosuid,nodev,nofail,x-gvfs-show 0 0
+sudo shutdown -r now
+sudo nala install evolution
+sudo nala install -y flameshot file-roller exa viewnior sxiv ueberzug mpv vlc galculator
+
+# PDF
+sudo apt install -y  evince pdfarranger zathura
+
+# Neofetch & Htop
+sudo apt install -y neofetch htop
+
+
+# Printing and bluetooth (if needed)
+# sudo apt install -y cups system-config-printer simple-scan
+# sudo apt install -y bluez blueman
+
+# sudo systemctl enable cups
+# sudo systemctl enable bluetooth
+
+---
+
+Yandex Browser
+
 cd Downloads
-wget https://repo.yandex.ru/yandex-browser/deb/pool/main/y/yandex-browser-stable/yandex-browser-stable_24.1.1.940-1_amd64.deb
-sudo dpkg -i yandex-browser-stable_24.1.1.940-1_amd64.deb
+wget https://repo.yandex.ru/yandex-browser/deb/pool/main/y/yandex-browser-stable/yandex-browser-stable_24.4.1.915-1_amd64.deb
+sudo nala install -y binutils fonts-liberation libvulkan1 squashfs-tools
+sudo dpkg -i yandex-browser-stable_24.4.1.915-1_amd64.deb
 sudo apt install -f -y
+rm -f yandex-browser-stable_24.4.1.915-1_amd64.deb
+---
+
 X File Explorer (XFE)
 
-mkdir ~/deb
-Скачать с сайта http://roland65.free.fr/xfe/index.php?page=download в директорию ~/deb
-cd ~/deb
-sudo nala install -y libfox
+cd ~/Downloads
+Скачать с сайта http://roland65.free.fr/xfe/index.php?page=download в директорию ~/Downloads
+sudo nala install -y libfox-1.6-0
 sudo dpkg -i (xfe_1.46.1-lrb_amd64.deb указывается имя скачанного пакета)
+rm -f xfe_1.46.1-1rb_amd64.deb
+---
 
-# Brave-Browser
+Yande Disk
+
+sudo nala install -y gnupg gnupg1 gnupg2
+echo "deb http://repo.yandex.ru/yandex-disk/deb/ stable main" | sudo tee -a /etc/apt/sources.list.d/yandex-disk.list > /dev/null && wget http://repo.yandex.ru/yandex-disk/YANDEX-DISK-KEY.GPG -O- | sudo apt-key add - && sudo apt-get update && sudo apt-get install -y yandex-disk
+yandex-disk setup
+---
+
+Brave browser
 
 sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
-
 echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main"|sudo tee /etc/apt/sources.list.d/brave-browser-release.list
-
 sudo nala update
-
 sudo nala install -y brave-browser
-# Install Libre Office
+
+Install Libre Office
+
 http://libreoffice-mirror.rbc.ru/pub/libreoffice/libreoffice/stable/24.2.2/deb/x86_64/LibreOffice_24.2.2_Linux_x86-64_deb.tar.gz
 http://libreoffice-mirror.rbc.ru/pub/libreoffice/libreoffice/stable/24.2.2/deb/x86_64/LibreOffice_24.2.2_Linux_x86-64_deb_langpack_ru.tar.gz
 http://libreoffice-mirror.rbc.ru/pub/libreoffice/libreoffice/stable/24.2.2/deb/x86_64/LibreOffice_24.2.2_Linux_x86-64_deb_helppack_ru.tar.gz
