@@ -46,6 +46,7 @@ sudo systemctl enable acpid
 sudo nala install -y xdg-utils xdg-user-dirs
 echo 'en_US' > ~/.config/user-dirs.locale
 LC_ALL=en_US xdg-user-dirs-update --force
+mkdir ~/Screenshots/
 
 # xorg display server installation
 sudo nala install -y xorg arandr numlockx xinput xinit xclip
