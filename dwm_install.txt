@@ -42,7 +42,7 @@ LC_ALL=en_US xdg-user-dirs-update --force
 mkdir ~/Screenshots/
 
 sudo nala install -y git vim mc ranger alacritty curl gvfs-backends unzip exa
-sudo nala install -y ninja-build gettext make cmake build-essential
+sudo nala install -y ninja-build gettext make cmake build-essential gawk
 
 # Network File Tools/System Events
 sudo apt install -y dialog mtools dosfstools avahi-daemon acpi acpid
@@ -56,6 +56,7 @@ sudo shutdown -r now
 sudo nala install -y xdotool dbus-x11 sxhkd libnotify-dev libnotify-bin wmctrl libx11-dev libxft-dev libxinerama-dev libfreetype6-dev libfontconfig1-dev
 
 sudo nala install -y arandr numlockx xinput xinit xclip
+sudo nala install -y xautolock
 
 sudo nala install -y xorg xorg-dev
 
