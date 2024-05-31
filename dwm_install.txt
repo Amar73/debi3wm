@@ -33,7 +33,15 @@ git clone https://github.com/Amar73/debi3wm.git
 ----------------------------------------------------------------------
 sudo apt install -y nala
 mkdir ~/.config
-sudo nala install -y git vim mc ranger alacritty curl gvfs-backends unzip
+
+# Create folders in user directory (eg. Documents,Downloads,etc.)
+sudo nala install -y xdg-utils xdg-user-dirs
+echo 'en_US' > ~/.config/user-dirs.locale
+LC_ALL=en_US xdg-user-dirs-update --force
+
+mkdir ~/Screenshots/
+
+sudo nala install -y git vim mc ranger alacritty curl gvfs-backends unzip exa
 sudo nala install -y ninja-build gettext make cmake build-essential
 
 # Network File Tools/System Events
@@ -42,21 +50,43 @@ sudo apt install -y dialog mtools dosfstools avahi-daemon acpi acpid
 sudo systemctl enable avahi-daemon
 sudo systemctl enable acpid
 
-# Create folders in user directory (eg. Documents,Downloads,etc.)
-sudo nala install -y xdg-utils xdg-user-dirs
-echo 'en_US' > ~/.config/user-dirs.locale
-LC_ALL=en_US xdg-user-dirs-update --force
-mkdir ~/Screenshots/
-
-# xorg display server installation
-sudo nala install -y xorg xorg-dev arandr numlockx xinput xinit xclip
-mkdir -p /home/$USER/.config/sxhkd/ && touch /home/$USER/.config/sxhkd/sxhkdrc
-sudo chmod 774 /home/$USER/.config/sxhkd/sxhkdrc
-sudo nala install -y xdotool dbus-x11 sxhkd libnotify-bin wmctrl libnotify-dev libx11-dev libxft-dev libxinerama-dev
 sudo shutdown -r now
 
+# xorg display server installation
+sudo nala install -y xdotool dbus-x11 sxhkd libnotify-dev libnotify-bin wmctrl libx11-dev libxft-dev libxinerama-dev libfreetype6-dev libfontconfig1-dev
+
+sudo nala install -y arandr numlockx xinput xinit xclip
+
+sudo nala install -y xorg xorg-dev
+
+mkdir -p /home/$USER/.config/sxhkd/ && touch /home/$USER/.config/sxhkd/sxhkdrc
+sudo chmod 774 /home/$USER/.config/sxhkd/sxhkdrc
+
+sudo shutdown -r now
+
+# Packages needed for window manager installation
+sudo apt install -y dunst
+
+# Networking etc
+sudo nala install -y network-manager network-manager-gnome gnome-disk-utility nautilus
+
+# Fonts and icons for now
+#nala search -n 'font.*ubuntu'
+cd ~/Amar73/debi3wm
+chmod +x nerdfonts.sh
+sudo./nerdfonts.sh
+sudo nala install -y fonts-recommended fonts-ubuntu fonts-ubuntu-console fonts-ubuntu-title fonts-font-awesome fonts-roboto fonts-firacode fonts-terminus
+sudo nala install -y materia-gtk-theme papirus-icon-theme lxappearance
+
 # Install X11 Window Managers
-sudo nala install -y i3 polybar rofi picom feh
+cd ~/Amar73/debi3wm
+chmod +x dwminstall.sh
+./dwminstall.sh
+
+sudo nala install -y rofi picom feh
+mkdir .config/rofi
+rofi -dump-config > .config/rofi/config.rasi
+v .config/rofi/config.rasi
 
 # # Sound packages & jq
 sudo nala install -y pulseaudio alsa-utils pavucontrol volumeicon-alsa pamixer jq
@@ -65,27 +95,10 @@ sudo nala install -y pulseaudio alsa-utils pavucontrol volumeicon-alsa pamixer j
 echo 'xrandr --output DP-2 --primary --mode 1920x1080 --output DP-1 --mode 1920x1080 --left-of DP-2 --output DP-3 --mode 1920x1080 --right-of DP-2' > ~/.xsessionrc
 sudo shutdown -r now
 
-# Packages needed for window manager installation
-sudo apt install -y dunst
-
-# Networking etc
-sudo nala install -y network-manager network-manager-gnome gnome-disk-utility
-
-mkdir ~/.config/polybar
-cp /usr/share/doc/polybar/examples/config.ini ~/.config/polybar/
-vim ~/.config/polybar/launch.sh
-chmod +x ~/.config/polybar/launch.sh
-#sudo nala install -y firefox-esr
-
-# Fonts and icons for now
-#nala search -n 'font.*ubuntu'
-sudo nala install -y fonts-recommended fonts-ubuntu fonts-ubuntu-console fonts-ubuntu-title fonts-font-awesome fonts-roboto fonts-firacode fonts-terminus
-sudo nala install -y materia-gtk-theme papirus-icon-theme lxappearance
-
 # EXA installation
 # replace ls command in .bashrc file with line below
 # alias ls='exa -al --long --header --color=always --group-directories-first'
-sudo nala install -y exa
+#sudo nala install -y exa
 
 # Geany Text Editor, text editor, markdown editor
 # sudo apt install -y geany
@@ -103,7 +116,7 @@ sudo vim /etc/fstab
 /dev/disk/by-uuid/da84b23d-b243-428b-aaa9-59f104d51346/media/home2 auto nosuid,nodev,nofail,x-gvfs-show 0 0
 sudo shutdown -r now
 sudo nala install evolution
-sudo nala install -y flameshot file-roller exa viewnior sxiv ueberzug mpv vlc galculator
+sudo nala install -y flameshot file-roller viewnior sxiv ueberzug mpv vlc galculator
 
 # PDF
 sudo apt install -y  evince pdfarranger zathura
