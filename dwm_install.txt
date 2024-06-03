@@ -53,7 +53,7 @@ sudo systemctl enable acpid
 sudo shutdown -r now
 
 # xorg display server installation
-sudo nala install -y xdotool dbus-x11 sxhkd libnotify-dev libnotify-bin wmctrl libx11-dev libxft-dev libxinerama-dev libfreetype6-dev libfontconfig1-dev
+sudo nala install -y xdotool sxhkd libnotify-dev libnotify-bin wmctrl libx11-dev libxft-dev libxinerama-dev libfreetype6-dev libfontconfig1-dev
 
 sudo nala install -y arandr numlockx xinput xinit xclip
 sudo nala install -y xautolock
