@@ -68,9 +68,6 @@ sudo shutdown -r now
 # Packages needed for window manager installation
 sudo apt install -y dunst
 
-# Networking etc
-sudo nala install -y network-manager network-manager-gnome gnome-disk-utility nautilus
-
 # Fonts and icons for now
 #nala search -n 'font.*ubuntu'
 cd ~/Amar73/debi3wm
@@ -89,12 +86,17 @@ mkdir .config/rofi
 rofi -dump-config > .config/rofi/config.rasi
 v .config/rofi/config.rasi
 
+sudo nala install evolution
+
 # # Sound packages & jq
 sudo nala install -y pulseaudio alsa-utils pavucontrol volumeicon-alsa pamixer jq
 
 # Monitor Settings
 echo 'xrandr --output DP-2 --primary --mode 1920x1080 --output DP-1 --mode 1920x1080 --left-of DP-2 --output DP-3 --mode 1920x1080 --right-of DP-2' > ~/.xsessionrc
 sudo shutdown -r now
+
+# Networking etc
+sudo nala install -y network-manager network-manager-gnome gnome-disk-utility nautilus
 
 # EXA installation
 # replace ls command in .bashrc file with line below
@@ -116,7 +118,6 @@ sudo vim /etc/fstab
 /dev/disk/by-uuid/4fdb8402-4aa0-4d4b-9ba1-db200c0b2c33 /media/home2 auto nosuid,nodev,nofail,x-gvfs-show 0 0
 /dev/disk/by-uuid/da84b23d-b243-428b-aaa9-59f104d51346/media/home2 auto nosuid,nodev,nofail,x-gvfs-show 0 0
 sudo shutdown -r now
-sudo nala install evolution
 sudo nala install -y flameshot file-roller viewnior sxiv ueberzug mpv vlc galculator
 
 # PDF
