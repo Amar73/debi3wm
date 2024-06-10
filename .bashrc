@@ -91,6 +91,10 @@ fi
 #alias ll='ls -lA'
 #alias la='ls -A'
 #alias l='ls -CF'
+alias .1="cd .."
+alias .2="cd ../.."
+alias .3="cd ../../.."
+alias .4="cd ../../../.."
 alias install='sudo nala install -y'
 alias update='sudo nala update'
 alias upgrade='sudo nala upgrade -y'
@@ -109,12 +113,13 @@ alias gA="cd /home/amar/Amar73/debi3wm/"
 alias gdwm="cd /home/amar/.config/suckless/dwm/"
 alias gdm="cd /home/amar/.config/suckless/dmenu/"
 alias gsl="cd /home/amar/.config/suckless/slstatus/"
-alias v="nvim"
-alias sv="sudo nvim"
+alias v="vim"
+alias sv="sudo vim"
 # Git aliases
-alias gp="git push -u origin main"
-alias gsave="git commit -m 'save'"
-alias gs="git status"
+alias ga="git add ."
+alias gp="git push"
+alias gs="git commit -m 'save'"
+#alias gs="git status"
 alias gc="git clone"
 alias tr="tree"
 

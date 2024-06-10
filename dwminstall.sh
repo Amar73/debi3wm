@@ -18,15 +18,15 @@ sudo cp ./temp /usr/share/xsessions/dwm.desktop;rm ./temp
 
 
 # Creating directories
-mkdir ~/.config/suckless
+mkdir /home/amar/.config/suckless
 
-sudo apt install -y xorg-dev sxhkd
+#sudo apt install -y xorg-dev sxhkd
 
 # Move install directory, make, and install
-cd ~/.config/suckless
-tools=( "dwm" "dmenu" "slstatus" )
+cd /home/amar/.config/suckless
+tools=( "dwm" "dmenu" "slstatus" "slock" )
 for tool in ${tools[@]}
 do 
 	git clone git://git.suckless.org/$tool
-	cd ~/.config/suckless/$tool;make;sudo make clean install;cd ..
+	cd /home/amar/.config/suckless/$tool;make;sudo make clean install;cd ..
 done

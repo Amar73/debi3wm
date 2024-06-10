@@ -41,7 +41,7 @@ LC_ALL=en_US xdg-user-dirs-update --force
 
 mkdir ~/Screenshots/
 
-sudo nala install -y git vim mc ranger alacritty curl gvfs-backends unzip exa
+sudo nala install -y git vim mc ranger alacritty curl gvfs-backends unzip exa tree
 sudo nala install -y ninja-build gettext make cmake build-essential gawk
 
 # Network File Tools/System Events
@@ -81,10 +81,12 @@ cd ~/Amar73/debi3wm
 chmod +x dwminstall.sh
 ./dwminstall.sh
 
-sudo nala install -y rofi picom feh
+sudo nala install -y flameshot rofi picom feh
+cp -r ~/Amar73/debi3wm/config/flameshot ~/.config/
 mkdir .config/rofi
 rofi -dump-config > .config/rofi/config.rasi
 v .config/rofi/config.rasi
+cp ~/Amar73/debi3wm/config/rofi/config.rasi ~/.config/rofi/
 
 sudo nala install evolution
 
@@ -118,7 +120,7 @@ sudo vim /etc/fstab
 /dev/disk/by-uuid/4fdb8402-4aa0-4d4b-9ba1-db200c0b2c33 /media/home2 auto nosuid,nodev,nofail,x-gvfs-show 0 0
 /dev/disk/by-uuid/da84b23d-b243-428b-aaa9-59f104d51346/media/home2 auto nosuid,nodev,nofail,x-gvfs-show 0 0
 sudo shutdown -r now
-sudo nala install -y flameshot file-roller viewnior sxiv ueberzug mpv vlc galculator
+sudo nala install -y file-roller viewnior sxiv ueberzug mpv vlc galculator
 
 # PDF
 sudo apt install -y  evince pdfarranger zathura
@@ -137,13 +139,20 @@ sudo apt install -y neofetch htop
 sudo nala autoremove
 
 ---
+Vivaldi Browser
+wget https://downloads.vivaldi.com/stable/vivaldi-stable_6.7.3329.39-1_amd64.deb
+sudo nala install -y fonts-liberation libu2f-udev
+sudo dpkg -i vivaldi-stable_6.7.3329.39-1_amd64.deb
+sudo apt install -f -y
+
+-------------
 
 Yandex Browser
 
 cd Downloads
-wget https://repo.yandex.ru/yandex-browser/deb/pool/main/y/yandex-browser-stable/yandex-browser-stable_24.4.1.915-1_amd64.deb
+wget https://repo.yandex.ru/yandex-browser/deb/pool/main/y/yandex-browser-stable/yandex-browser-stable_24.4.1.951-1_amd64.deb
 sudo nala install -y binutils fonts-liberation libvulkan1 squashfs-tools
-sudo dpkg -i yandex-browser-stable_24.4.1.915-1_amd64.deb
+sudo dpkg -i yandex-browser-stable_24.4.1.951-1_amd64.deb
 sudo apt install -f -y
 rm -f yandex-browser-stable_24.4.1.915-1_amd64.deb
 ---
@@ -176,3 +185,5 @@ Install Libre Office
 http://libreoffice-mirror.rbc.ru/pub/libreoffice/libreoffice/stable/24.2.2/deb/x86_64/LibreOffice_24.2.2_Linux_x86-64_deb.tar.gz
 http://libreoffice-mirror.rbc.ru/pub/libreoffice/libreoffice/stable/24.2.2/deb/x86_64/LibreOffice_24.2.2_Linux_x86-64_deb_langpack_ru.tar.gz
 http://libreoffice-mirror.rbc.ru/pub/libreoffice/libreoffice/stable/24.2.2/deb/x86_64/LibreOffice_24.2.2_Linux_x86-64_deb_helppack_ru.tar.gz
+tar -xzvf LibreOffice_24.2.2_Linux_x86-64_deb.tar.gz
+sudo dpkg -i *.deb
