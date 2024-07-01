@@ -187,3 +187,40 @@ http://libreoffice-mirror.rbc.ru/pub/libreoffice/libreoffice/stable/24.2.2/deb/x
 http://libreoffice-mirror.rbc.ru/pub/libreoffice/libreoffice/stable/24.2.2/deb/x86_64/LibreOffice_24.2.2_Linux_x86-64_deb_helppack_ru.tar.gz
 tar -xzvf LibreOffice_24.2.2_Linux_x86-64_deb.tar.gz
 sudo dpkg -i *.deb
+
+------------------------------------------------------------------------------------------
+
+Установка Thunderbird вручную
+
+Thunderbird вообще не будет запускаться без следующих библиотек или пакетов:
+- glibc 2.17 or higher
+- GTK+ 3.14 or higher
+- libdbus-glib 0.6.0 or higher
+- libglib 2.42 or higher
+- libstdc++ 4.8.1 or higher
+- libxtst 1.2.3 or higher
+- X.Org 1.0 or higher (1.7 or higher is recommended)
+Для обеспечения оптимальной функциональности мы рекомендуем следующие библиотеки или пакеты:
+- DBus 1.0 or higher
+- NetworkManager 0.7 or higher
+- PulseAudio
+https://support.mozilla.org/ru/kb/ustanovka-thunderbird-na-linux#w_ustanovka-thunderbird-vruchnuiu-dlia-opytnykh-polzovatelei
+1. Загрузите Thunderbird, который вы хотите установить: стабильную версию, бета-версию или ежедневную (ссылки на эти места загрузки смотрите выше). Он будет в виде thunderbird-<версия>.tar.bz2.
+2. Откройте терминал и перейдите в папку, куда сохранился загруженный файл. Например:
+
+   cd ~/Downloads
+3. Извлеките содержимое загруженного файла. При этом будет создана папка с именем "thunderbird". После этого вы можете удалить архив:
+
+   tar xjf thunderbird-*.tar.bz2
+
+   rm thunderbird-*.tar.bz2
+4. Переместите распакованную папку Thunderbird в /opt:
+
+   sudo mv thunderbird /opt
+5. Создайте символическую ссылку на исполняемый файл Thunderbird:
+
+   sudo ln -s /opt/thunderbird/thunderbird /usr/local/bin/thunderbird
+6. Загрузите копию файла рабочего стола:
+
+   wget https://raw.githubusercontent.com/mozilla/sumo-kb/main/installing-thunderbird-linux/thunderbird.desktop -P /usr/local/share/applications
+--------------------------------------------------------------------------------------------------------
