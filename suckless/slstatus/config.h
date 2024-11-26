@@ -1,7 +1,7 @@
 /* See LICENSE file for copyright and license details. */
 
 /* interval between updates (in ms) */
-const unsigned int interval = 1000;
+const unsigned int interval = 300;
 
 /* text to show if no value can be retrieved */
 static const char unknown_str[] = "n/a";
@@ -63,17 +63,38 @@ static const char unknown_str[] = "n/a";
  * wifi_essid          WiFi ESSID                      interface name (wlan0)
  * wifi_perc           WiFi signal in percent          interface name (wlan0)
  */
+
+/*static const char vol[] = "muted=`pactl get-sink-mute @DEFAULT_SINK@ | awk '{print $2;}'`; \
+                            volume=`pactl get-sink-volume @DEFAULT_SINK@ | awk '{print $5;}'`; \
+                            if [ -z ${muted} ]; then \
+                                printf \"${volume}\"; \
+                            else printf \"Off\"; \
+                            fi";
+
+static const char mic[] = "muted=`pactl get-source-volume @DEFAULT_AUDIO_SOURCE@ | awk '{print $3;}'`; \
+                            volume=`wpctl get-volume @DEFAULT_AUDIO_SOURCE@ | awk '{print $2;}'`; \
+                            if [ -z ${muted} ]; then \
+                                printf \"${volume}\"; \
+                            else printf \"Off\"; \
+                            fi";*/
+
+
+static const char mute[] = "pactl get-sink-mute @DEFAULT_SINK@";
+
+static const char vol[] = "pactl get-sink-volume @DEFAULT_SINK@ | awk '{print $5}'";
+
+static const char mic[] = "pactl get-source-mute @DEFAULT_SOURCE@ | awk '{print $1, $2}'";
+
 static const struct arg args[] = {
 	/* function format          argument */
+    {cpu_perc,              " -[CPU %s%%]",          NULL},
     {keymap,                " -[  %s ]",            NULL},
     { temp, "[TEMP %sC] ", "/sys/class/thermal/thermal_zone0/temp" },
-    {netspeed_rx,           " -[↓%s ]",             "eno1"},
-    {netspeed_tx,           " -[↑%s ]",             "eno1"},
-    {cpu_perc,              " -[CPU %s%%]",          NULL},
+    {run_command,           "    %s ",              mute },
+    {run_command,           "    %s ",               vol },
+    {run_command,           "   %s ",                mic },
     {ram_free,              " -[MEM %s]",            NULL},
     {ram_perc,              " -[RAM %s%] ",          NULL},
     {disk_free,             "/: %s|",              "/"},
-    {disk_free,             "/home2: %s|",           "/media/home2"},
-    { run_command, ": %4s | ", "amixer sget Master | awk -F\"[][]\" '/%/ { print $2 }' | head -n1" },
-    {datetime,              "%s",                 "%F %T"},
+    { datetime, "%s",           "%F %T" },
 };

@@ -1,8 +1,17 @@
+super + Return
+    alacritty
+
+Print
+    flameshot gui
+
+super + a
+    rofi -show drun
+
 super + shift + y
   yandex-browser-stable
 
-super + shift + e
-  evolution
-
 super + shift + t
   telegram-desktop
+
+super + shift + l
+    slock cmd
