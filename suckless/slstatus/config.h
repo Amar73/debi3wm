@@ -56,6 +56,7 @@ static const char unknown_str[] = "n/a";
  *                                                     thermal zone on FreeBSD
  *                                                     (tz0, tz1, etc.)
  * uid                 UID of current user             NULL
+ * up                  interface is running            interface name (eth0)
  * uptime              system uptime                   NULL
  * username            username of current user        NULL
  * vol_perc            OSS/ALSA volume in percent      mixer file (/dev/mixer)
@@ -63,7 +64,6 @@ static const char unknown_str[] = "n/a";
  * wifi_essid          WiFi ESSID                      interface name (wlan0)
  * wifi_perc           WiFi signal in percent          interface name (wlan0)
  */
-
 /*static const char vol[] = "muted=`pactl get-sink-mute @DEFAULT_SINK@ | awk '{print $2;}'`; \
                             volume=`pactl get-sink-volume @DEFAULT_SINK@ | awk '{print $5;}'`; \
                             if [ -z ${muted} ]; then \
@@ -79,22 +79,19 @@ static const char mic[] = "muted=`pactl get-source-volume @DEFAULT_AUDIO_SOURCE@
                             fi";*/
 
 
-static const char mute[] = "pactl get-sink-mute @DEFAULT_SINK@";
+static const char mute[] = "pamixer --get-mute";
 
-static const char vol[] = "pactl get-sink-volume @DEFAULT_SINK@ | awk '{print $5}'";
-
-static const char mic[] = "pactl get-source-mute @DEFAULT_SOURCE@ | awk '{print $1, $2}'";
+static const char vol[] = "pamixer --get-volume-human";
 
 static const struct arg args[] = {
-	/* function format          argument */
+        /* function format          argument */
     {cpu_perc,              " -[CPU %s%%]",          NULL},
-    {keymap,                " -[  %s ]",            NULL},
     { temp, "[TEMP %sC] ", "/sys/class/thermal/thermal_zone0/temp" },
-    {run_command,           "    %s ",              mute },
-    {run_command,           "    %s ",               vol },
-    {run_command,           "   %s ",                mic },
+    {run_command,           "   %s ",              mute },
+    {run_command,           "   %s%% ",            vol },
     {ram_free,              " -[MEM %s]",            NULL},
     {ram_perc,              " -[RAM %s%] ",          NULL},
     {disk_free,             "/: %s|",              "/"},
     { datetime, "%s",           "%F %T" },
+    {keymap,                " -[  %s ]",            NULL},
 };

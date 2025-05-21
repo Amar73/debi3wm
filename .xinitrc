@@ -1,31 +1,17 @@
-#!/bin/sh
-
-# run flameshot daemon
 exec flameshot &
-
-#for wallpaper
-#if [[ $(pidof nitrogen) ]]; then
-# echo "nitrogen is running"
-#else
-# echo "starting"
-exec nitrogen --restore --set-scaled &
-#exec nitrogen --restore &
-#fi
-
-#feh --bg-fill ~/Pictures/Wallpapers/wallpaper.jpg &
-
-#notification daemon
+exec nitrogen --restore &
 exec dunst -config ~/.config/dunst/dunstrc &
-
-exec birdtray &
-
-numlockx &
-sxhkd -c ~/.config/sxhkd/sxhkdrc &
-exec /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 &
+exec yandex-disk start &
+exec numlockx &
+exec sxhkd -c ~/.config/sxhkd/sxhkdrc &
+/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 &
 exec slstatus &
-exec xautolock -time 10 -locker slock &
-exec dwm
-XDG_CONFIG_HOME=~/.config
-export XDG_CONFIG_HOME
+exec xrdb &
+# Включаем DPMS
+xset +dpms
+# Устанавливаем время до перехода в режим ожидания
+xset dpms 600 600 600  # 10 минут до выключения экрана
 
-while type dwm >/dev/null; do dwm && continue || break; done
+# Запуск автоблокировки: блокируем через 20 мин бездействия
+exec xautolock -time 20 -locker "lock" &
+exec dwm

@@ -1,0 +1,9 @@
+#!/bin/sh
+i3lock \
+  --inside-color=00000000 \
+  --ring-color=ffffffff \
+  --line-uses-ring \
+  --keylayout 2 \
+  --clock \
+  --time-str="%H:%M" \
+  --date-str="%A, %d %B %Y"
