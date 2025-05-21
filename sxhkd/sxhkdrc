@@ -13,5 +13,6 @@ super + shift + y
 super + shift + t
   telegram-desktop
 
+# Ручная блокировка по Super+Shift+l
 super + shift + l
-    slock cmd
+  lock
