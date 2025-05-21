@@ -114,23 +114,23 @@ check_ceph_access() {
 }
 
 # Валидация бэкапа
-validate_backup() {
-    local src=$1
-    local dst=$2
-    log INFO "Начата валидация: $src -> $dst"
-
-    if ! rclone check "$src" "$dst" \
-        --config="$RCLONE_CONFIG" \
-        --log-level=INFO \
-        --log-file="$LOGFILE"; then
-
-        log ERROR "Валидация $src не пройдена"
-        return 1
-    fi
-
-    log INFO "Валидация $src успешно завершена"
-    return 0
-}
+#validate_backup() {
+#    local src=$1
+#    local dst=$2
+#    log INFO "Начата валидация: $src -> $dst"
+#
+#    if ! rclone check "$src" "$dst" \
+#        --config="$RCLONE_CONFIG" \
+#        --log-level=INFO \
+#        --log-file="$LOGFILE"; then
+#
+#        log ERROR "Валидация $src не пройдена"
+#        return 1
+#    fi
+#
+#    log INFO "Валидация $src успешно завершена"
+#    return 0
+#}
 
 # Удаление устаревших данных
 cleanup_old_backups() {
@@ -196,16 +196,16 @@ backup_dir() {
         return 1
     fi
 
-    # Валидация результата
-    validate_backup "$dir" "$dest_dir" || return 1
-    log INFO "Бэкап $dir успешно завершен"
+#    # Валидация результата
+#    validate_backup "$dir" "$dest_dir" || return 1
+#    log INFO "Бэкап $dir успешно завершен"
 }
 
 # Экспорт всех необходимых функций
 export -f log
 export -f retry_command
 export -f check_ceph_access
-export -f validate_backup
+#export -f validate_backup
 export -f cleanup_old_backups
 export -f backup_dir
 

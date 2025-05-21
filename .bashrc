@@ -8,6 +8,9 @@ HISTFILESIZE=5000
 export HISTTIMEFORMAT="%h %d %H:%M:%S "
 PROMPT_COMMAND='history -a'
 shopt -s checkwinsize
+mkcd () {
+  mkdir -p "$1" && cd "$1"
+}
 alias .1="cd .."
 alias .2="cd ../.."
 alias .3="cd ../../.."
@@ -24,6 +27,11 @@ alias gA="cd /home/amar/Amar73/debi3wm/"
 alias gdwm="cd /home/amar/.config/suckless/dwm/"
 alias gdm="cd /home/amar/.config/suckless/dmenu/"
 alias gsl="cd /home/amar/.config/suckless/slstatus/"
+alias gpull='git pull origin main'
+alias gs='git status'
+alias ga='git add .'
+alias gc='git commit -m'
+alias gpush='git push origin main'
 alias v="vim"
 alias sv="sudo vim"
 alias ls='ls --color=auto'
