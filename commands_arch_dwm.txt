@@ -640,6 +640,11 @@ telegram-desktop
 super + shift + l
 lock
 
+
+sudo chmod +x /usr/local/bin/lock
+chmod +x .xinitrc
+chmod 600 ~/.ssh/config
+
 sudo pacman -S libreoffice-still
 sudo pacman -S libreoffice-still-ru
 
