@@ -1,0 +1,36 @@
+Host github.com
+    HostName github.com
+    User git
+    IdentityAgent none
+    IdentityFile ~/.ssh/id_ed25519
+
+    # Подключение к amar224 (рабочая машина)
+Host amar224
+    HostName amar
+    User amar
+    IdentityAgent ~/.ssh/id_ed25519
+
+# Подключение к wn75 через amar224
+Host wn75
+    HostName wn75
+    User root
+    ProxyJump amar224
+
+# Подключение к архивным серверам через wn75
+Host arch03 arch04 arch05
+    HostName %h
+    User root
+    ProxyJump wn75
+
+# Подключение к ui через amar224 (порт 7890)
+Host ui
+    HostName ui
+    User amar
+    Port 7890
+    ProxyJump amar224
+
+# Подключение к minio-серверам через ui
+Host archminio01 archminio02
+    HostName %h
+    User amar
+    ProxyJump ui

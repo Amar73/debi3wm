@@ -46,5 +46,13 @@ export PATH="/usr/local/go/bin:$PATH"
 export VISUAL=vim;
 export EDITOR=vim;
 PS1='\[\e[96m\]\t\[\e[0m\] \[\e[38;5;208m\]\u\[\e[0m\]@\[\e[38;5;208m\]\h\[\e[93m\]\w\n\[\e[0m\]$? \[\e[93m\]\$\[\e[0m\]'
-eval "$(ssh-agent -s)"
-ssh-add ~/.ssh/id_ed25519
+if [ -z "$SSH_AUTH_SOCK" ]; then
+   eval "$(ssh-agent -s)"
+   ssh-add ~/.ssh/id_ed25519
+fi
+alias a224='ssh amar224'
+alias a03='ssh arch03'
+alias a04='ssh arch04'
+alias a05='ssh arch05'
+alias m01='ssh archminio01'
+alias m02='ssh archminio02'
