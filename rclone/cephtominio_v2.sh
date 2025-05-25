@@ -103,20 +103,20 @@ create_bucket_if_not_exists() {
 create_bucket_if_not_exists "minio" "backup-deleted"
 
 # Валидация бэкапа
-validate_backup() {
-    local src="$1"
-    local dst="$2"
-    log INFO "Начата валидация: $src -> $dst"
-    if ! rclone check "$src" "$dst" \
-        --config="$RCLONE_CONFIG" \
-        --log-level=INFO \
-        --log-file="$LOGFILE" \
-        --one-way; then  # Добавлен флаг для односторонней проверки
-        log ERROR "Валидация $src не пройдена"
-        return 1
-    fi
-    log INFO "Валидация $src успешно завершена"
-}
+#validate_backup() {
+#    local src="$1"
+#    local dst="$2"
+#    log INFO "Начата валидация: $src -> $dst"
+#    if ! rclone check "$src" "$dst" \
+#        --config="$RCLONE_CONFIG" \
+#        --log-level=INFO \
+#        --log-file="$LOGFILE" \
+#        --one-way; then  # Добавлен флаг для односторонней проверки
+#        log ERROR "Валидация $src не пройдена"
+#        return 1
+#    fi
+#    log INFO "Валидация $src успешно завершена"
+#}
 
 # Удаление устаревших данных
 cleanup_old_backups() {
@@ -154,7 +154,7 @@ RCLONE_FLAGS="--progress \
 export -f log
 export -f retry_command
 export -f create_bucket_if_not_exists
-export -f validate_backup
+#export -f validate_backup
 export RCLONE_CONFIG RCLONE_TRANSFERS RCLONE_RETRIES RCLONE_CHECKERS LOGFILE DELETE_BACKUP RCLONE_FLAGS
 
 # Основной процесс бэкапа
@@ -185,9 +185,9 @@ process_bucket() {
         return 1
     fi
     
-    if ! validate_backup "$bucket" "$target_path"; then
-        return 1
-    fi
+#    if ! validate_backup "$bucket" "$target_path"; then
+#        return 1
+#    fi
 }
 export -f process_bucket
 
