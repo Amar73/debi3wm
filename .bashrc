@@ -36,6 +36,7 @@ alias gA="cd /home/amar/Amar73/debi3wm/"
 alias gdwm="cd /home/amar/.config/suckless/dwm/"
 alias gdm="cd /home/amar/.config/suckless/dmenu/"
 alias gsl="cd /home/amar/.config/suckless/slstatus/"
+alias gy='cd /home/amar/Yandex.Disk'
 
 alias gpull='git pull origin main'
 alias gs='git status'
