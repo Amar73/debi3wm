@@ -127,7 +127,7 @@ check_storage_access() {
 
     # Проверка состояния Ceph через SSH
     if command -v ssh >/dev/null; then
-        if ! ssh cephsvc05 "podman exec ceph-mon-cephsvc05 ceph status" >/dev/null; then
+        if ! ssh svc02 "podman exec ceph-mon-svc02 ceph status" >/dev/null; then
             log WARNING "Проблемы с состоянием Ceph-кластера"
         else
             log INFO "Ceph-кластер в порядке"
