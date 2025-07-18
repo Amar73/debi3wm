@@ -215,7 +215,7 @@ cleanup_old_backups() {
     fi
 
     local purge_cmd="rclone purge --min-age 30d '$DELETE_BACKUP' --log-level=INFO --log-file='$LOGFILE'"
-    [[ -n "$RCLONE_CONFIG" ]] && purge_cmd="$purge_cmd --config='$RCLONE_CONFIG'"
+    [[ -n "${RCLONE_CONFIG:-}" ]] && purge_cmd="$purge_cmd --config='$RCLONE_CONFIG'"
     if ! retry_command "$purge_cmd"; then
         log ERROR "Ошибка при очистке устаревших данных"
         return 1
@@ -273,7 +273,7 @@ backup_dir() {
 
     # Условное добавление --exclude-from
     [[ "$USE_EXCLUDE_FILE" == true ]] && RCLONE_FLAGS+=("--exclude-from=$EXCLUDE_FILE")
-    [[ -n "$RCLONE_CONFIG" ]] && RCLONE_FLAGS+=(--config="$RCLONE_CONFIG")
+    [[ -n "${RCLONE_CONFIG:-}" ]] && RCLONE_FLAGS+=(--config="$RCLONE_CONFIG")
     [[ "$DRY_RUN" == true ]] && RCLONE_FLAGS+=(--dry-run)
 
     local cmd=(rclone sync "${RCLONE_FLAGS[@]}" "$dir" "$dest_dir")
@@ -327,7 +327,7 @@ log INFO "Запуск от пользователя: $(whoami)"
 log INFO "Права на /ceph: $(ls -ld /ceph)"
 log INFO "Права на /backup: $(ls -ld /backup)"
 log INFO "Версия rclone: $(rclone --version | head -n1)"
-log INFO "Конфиг rclone: $RCLONE_CONFIG"
+log INFO "Конфиг rclone: ${RCLONE_CONFIG:-system}"
 log INFO "Параметры: transfers=$RCLONE_TRANSFERS checkers=$RCLONE_CHECKERS retries=$RCLONE_RETRIES"
 log INFO "Параллельные задачи: $MAX_JOBS"
 if [[ "$DRY_RUN" == true ]]; then
