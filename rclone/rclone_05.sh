@@ -1,4 +1,42 @@
 #!/usr/bin/env bash
+set -euo pipefail
+
+# Опции по умолчанию
+DRY_RUN=false
+MAX_JOBS=${MAX_JOBS:-4}
+
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") [OPTIONS]
+
+  -n, --dry-run       Запуск без копирования файлов
+  -w, --workers NUM   Количество параллельных задач (по умолчанию $MAX_JOBS)
+  -h, --help          Показать эту справку
+EOF
+}
+
+# Обработка аргументов командной строки
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -n|--dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        -w|--workers)
+            MAX_JOBS=$2
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "Неизвестный параметр: $1" >&2
+            usage >&2
+            exit 1
+            ;;
+    esac
+done
 
 # Конфигурация
 BACKUP_USER="backup_user"
@@ -19,6 +57,11 @@ RCLONE_RETRIES=${RCLONE_RETRIES:-5}
 TIMESTAMP=$(date +'%Y-%m-%d_%H-%M')
 LOGFILE="$LOGDIR/backup_$TIMESTAMP.log"
 mkdir -p "$LOGDIR" || { echo "Не удалось создать $LOGDIR" >&2; exit 1; }
+
+if [[ $EUID -ne 0 ]]; then
+    echo "Скрипт должен запускаться от root" >&2
+    exit 1
+fi
 
 # Функция логирования
 log() {
@@ -231,6 +274,7 @@ backup_dir() {
     # Условное добавление --exclude-from
     [[ "$USE_EXCLUDE_FILE" == true ]] && RCLONE_FLAGS+=("--exclude-from=$EXCLUDE_FILE")
     [[ -n "$RCLONE_CONFIG" ]] && RCLONE_FLAGS+=(--config="$RCLONE_CONFIG")
+    [[ "$DRY_RUN" == true ]] && RCLONE_FLAGS+=(--dry-run)
 
     local cmd=(rclone sync "${RCLONE_FLAGS[@]}" "$dir" "$dest_dir")
     log DEBUG "Выполняемая команда: ${cmd[*]}"
@@ -246,7 +290,7 @@ backup_dir() {
 
 # Экспорт функций и переменных
 export -f log retry_command check_ceph_access validate_backup cleanup_old_backups backup_dir
-export RCLONE_CONFIG RCLONE_TRANSFERS RCLONE_CHECKERS RCLONE_RETRIES LOGFILE MAIN_BACKUP DELETE_BACKUP USE_EXCLUDE_FILE
+export RCLONE_CONFIG RCLONE_TRANSFERS RCLONE_CHECKERS RCLONE_RETRIES LOGFILE MAIN_BACKUP DELETE_BACKUP USE_EXCLUDE_FILE DRY_RUN
 
 # Основная функция
 perform_backup() {
@@ -262,7 +306,7 @@ perform_backup() {
     cleanup_old_backups || log WARNING "Проблемы с очисткой, но продолжаем..."
 
     # Параллельная обработка с управлением через цикл
-    local max_jobs=4
+    local max_jobs=$MAX_JOBS
     local running_jobs=0
     for dir in "${SOURCEDIRS[@]}"; do
         backup_dir "$dir" &
@@ -285,6 +329,10 @@ log INFO "Права на /backup: $(ls -ld /backup)"
 log INFO "Версия rclone: $(rclone --version | head -n1)"
 log INFO "Конфиг rclone: $RCLONE_CONFIG"
 log INFO "Параметры: transfers=$RCLONE_TRANSFERS checkers=$RCLONE_CHECKERS retries=$RCLONE_RETRIES"
+log INFO "Параллельные задачи: $MAX_JOBS"
+if [[ "$DRY_RUN" == true ]]; then
+    log INFO "Включен режим dry run"
+fi
 
 if perform_backup; then
     log INFO "Все бэкапы успешно завершены"
