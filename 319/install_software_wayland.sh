@@ -126,7 +126,6 @@ PACMAN_PKGS=(
   waybar                           # Статусная панель
   wlr-randr                        # Аналог xrandr для wlroots
   kanshi                           # Автопрофили мониторов (как autorandr)
-  xwaylandvideobridge              # Screen-share для XWayland-приложений
 
   # --- Библиотеки ---
   libxkbcommon                     # Раскладки клавиатуры (нужен Wayland)
@@ -136,7 +135,7 @@ PACMAN_PKGS=(
 
   # --- Шрифты ---
   ttf-jetbrains-mono-nerd
-  ttf-font-awesome
+  otf-font-awesome                 # Переименован из ttf-font-awesome (пакет font-awesome в extra)
   noto-fonts
   noto-fonts-cjk
   noto-fonts-emoji
@@ -263,6 +262,7 @@ AUR_PKGS=(
   lazydocker
 
   # --- Wayland-утилиты ---
+  xwaylandvideobridge              # Screen-share для XWayland-приложений (AUR, не в official)
   ydotool                          # Замена xdotool для Wayland (эмуляция ввода)
 )
 
@@ -711,7 +711,7 @@ install_build_prereqs() {
 install_yay_if_needed() {
   if command -v yay >/dev/null 2>&1; then
     YAY_AVAILABLE=true
-    log "yay уже установлен: $(yay --version | head -n1)"
+    log "yay уже установлен: $(yay --version 2>&1 | { read -r line; echo "$line"; })"
     return 0
   fi
 
@@ -753,7 +753,7 @@ install_yay_if_needed() {
 
   command -v yay >/dev/null 2>&1 || die "yay не обнаружен после установки — что-то пошло не так"
   YAY_AVAILABLE=true
-  log "yay успешно установлен: $(yay --version | head -n1)"
+  log "yay успешно установлен: $(yay --version 2>&1 | { read -r line; echo "$line"; })"
 }
 
 # =============================================================================
