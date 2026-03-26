@@ -158,7 +158,7 @@ PACMAN_PKGS=(
   gnome-disk-utility
 
   # --- Запуск приложений ---
-  rofi-wayland
+  # rofi-wayland
 
   # --- Уведомления ---
   dunst                            # Работает на Wayland начиная с v1.9
