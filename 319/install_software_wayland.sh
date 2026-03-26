@@ -3,13 +3,11 @@
 # install_software.sh — установщик пакетов и конфигураций для Arch Linux
 #
 # Что делает скрипт:
-#   1. Устанавливает пакеты из официальных репозиториев через pacman.
-#   2. Устанавливает пакеты из AUR через yay (собирает yay если нужно).
+#   1. Определяет производителя видеокарты через lspci и устанавливает
+#      соответствующие драйверы (Intel / AMD / NVIDIA nouveau / виртуалка).
+#   2. Устанавливает пакеты из официальных репозиториев через pacman.
 #   3. Разворачивает конфигурационные файлы из каталога-источника в ~/.config/.
 #      Перед заменой каждого файла создаётся резервная копия (.bak.TIMESTAMP).
-#
-# Сборка AUR-пакетов всегда выполняется от непривилегированного пользователя —
-# это требование makepkg и базовая мера безопасности.
 #
 # ИСПОЛЬЗОВАНИЕ:
 #   sudo ./install_software.sh [опции]
@@ -27,22 +25,8 @@
 #   # Только установить пакеты, конфиги не трогать:
 #   sudo ./install_software.sh --no-configs
 #
-#   # Если запускаешь НЕ через sudo (уже root), укажи пользователя явно:
-#   sudo ./install_software.sh --aur-user username
-#
-# UNATTENDED-РЕЖИМ (CI, автоматизация без интерактивного sudo):
-#   sudo ./install_software.sh --dry-run --allow-temp-sudo
-#   sudo ./install_software.sh --allow-temp-sudo
-#
 # ОПЦИИ:
 #   --dry-run           Только анализ: показать что будет сделано, без изменений.
-#                       Внимание: AUR-пакеты могут попасть в UNKNOWN если yay ещё
-#                       не установлен — в реальном запуске yay собирается первым.
-#   --jobs N            Число параллельных jobs для makepkg/make (по умолч.: nproc).
-#   --aur-user USER     Пользователь для сборки AUR. Нужен только если скрипт
-#                       запускается напрямую от root, а не через sudo.
-#   --allow-temp-sudo   Выдать пользователю временный NOPASSWD на /usr/bin/pacman.
-#                       Нужно только в unattended-режиме без интерактивного sudo.
 #   --configs-only      Пропустить установку пакетов, только развернуть конфиги.
 #   --no-configs        Пропустить развёртывание конфигов, только пакеты.
 #   --configs-src DIR   Каталог с конфигами (по умолч.: ./configs рядом со скриптом).
@@ -61,19 +45,18 @@
 #   -h, --help          Показать эту справку.
 #
 # ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ:
-#   BUILD_JOBS          Альтернатива --jobs (флаг имеет приоритет).
 #   CONFIGS_SRC         Альтернатива --configs-src (флаг имеет приоритет).
 #
 # ТРЕБОВАНИЯ:
 #   - Arch Linux с pacman
 #   - Запуск от root (через sudo)
-#   - Доступ в интернет (для AUR и обновления баз)
-#   - git и base-devel (устанавливаются автоматически если отсутствуют)
+#   - Доступ в интернет (для обновления баз)
+#   - pciutils (устанавливается автоматически если отсутствует)
 #
 # ТОПОЛОГИЯ ДИСКОВ:
-#   /dev/sda1 → /        (корневой раздел, переустанавливается при смене ОС)
-#   /dev/sda2 → /boot    (загрузчик)
-#   /dev/sdb1 → /home    (домашние каталоги, данные сохраняются между переустановками)
+#   /dev/sda1 -> /        (корневой раздел, переустанавливается при смене ОС)
+#   /dev/sda2 -> /boot    (загрузчик)
+#   /dev/sdb1 -> /home    (домашние каталоги, данные сохраняются между переустановками)
 #
 #   Конфиги хранятся на /dev/sdb1 вместе с /home — при переустановке системы
 #   на /dev/sda данные пользователя и конфиги остаются нетронутыми.
@@ -88,25 +71,20 @@ set -Eeuo pipefail
 # =============================================================================
 
 readonly LOG_FILE="/var/log/install_software.log"
-readonly TEMP_SUDOERS_FILE="/etc/sudoers.d/99-temp-aur-installer"
 
 DRY_RUN=false
-ALLOW_TEMP_SUDO=false
-DEPLOY_CONFIGS=true    # становится false при --no-configs
-CONFIGS_ONLY=false     # становится true при --configs-only
-# BUILD_JOBS берётся из окружения или вычисляется через nproc.
-# Флаг --jobs перекроет это значение при разборе аргументов.
-BUILD_JOBS="${BUILD_JOBS:-$(nproc)}"
-AUR_USER_CLI=""
-# Источник конфигов: переменная окружения → каталог ./configs рядом со скриптом.
+DEPLOY_CONFIGS=true   # становится false при --no-configs
+CONFIGS_ONLY=false    # становится true при --configs-only
+# Источник конфигов: переменная окружения -> каталог ./configs рядом со скриптом.
 # Флаг --configs-src перекрывает оба варианта.
 CONFIGS_SRC="${CONFIGS_SRC:-$(dirname "$(realpath "$0")")/configs}"
 
 # =============================================================================
-# PACMAN_PKGS — официальные репозитории Arch Linux
+# PACMAN_PKGS — базовые пакеты из официальных репозиториев
 # =============================================================================
+# Видеодрайверы в этот массив НЕ входят — они определяются автоматически
+# функцией detect_gpu() и добавляются в GPU_PKGS.
 # Все пакеты проверяются через `pacman -Si` перед установкой.
-# Если пакет не найден — скрипт завершится с ошибкой до начала установки.
 
 PACMAN_PKGS=(
   # --- Wayland — стек и интеграция ---
@@ -135,7 +113,7 @@ PACMAN_PKGS=(
 
   # --- Шрифты ---
   ttf-jetbrains-mono-nerd
-  otf-font-awesome                 # Переименован из ttf-font-awesome (пакет font-awesome в extra)
+  otf-font-awesome
   noto-fonts
   noto-fonts-cjk
   noto-fonts-emoji
@@ -161,17 +139,13 @@ PACMAN_PKGS=(
   unzip
   tree
   dmidecode
+  pciutils                         # Нужен для lspci (определение GPU)
 
   # --- Сеть ---
   iproute2
   bind
   networkmanager
-  network-manager-applet           # nm-applet (GTK, работает через XWayland или нативно)
-
-  # --- Видеодрайвер (nouveau / Wayland) ---
-  mesa                             # DRM-драйвер для nouveau на Wayland
-  libva-mesa-driver                # VA-API через nouveau
-  vulkan-nouveau                   # Vulkan (нужен Hyprland)
+  network-manager-applet
 
   # --- Терминалы ---
   alacritty                        # Поддерживает Wayland нативно
@@ -184,13 +158,13 @@ PACMAN_PKGS=(
   gnome-disk-utility
 
   # --- Запуск приложений ---
-  rofi-wayland                     # Wayland-порт rofi (замена X11-rofi)
+  rofi-wayland
 
   # --- Уведомления ---
-  dunst                            # Работает на Wayland начиная с v1.9 (или mako)
+  dunst                            # Работает на Wayland начиная с v1.9
 
   # --- Буфер обмена ---
-  wl-clipboard                     # Wayland-буфер обмена (замена xclip)
+  wl-clipboard                     # Wayland-буфер обмена
   cliphist                         # История буфера обмена
 
   # --- Скриншоты ---
@@ -199,7 +173,7 @@ PACMAN_PKGS=(
   swappy                           # Аннотации поверх скриншота
 
   # --- Яркость ---
-  brightnessctl                    # Управление яркостью без sudo
+  brightnessctl
 
   # --- Браузеры и связь ---
   firefox
@@ -234,37 +208,26 @@ PACMAN_PKGS=(
 )
 
 # =============================================================================
-# AUR_PKGS — пакеты из AUR (устанавливаются через yay / paru)
+# Таблица видеодрайверов
 # =============================================================================
-# Проверяются через `yay -Si` (если yay уже есть) или через git ls-remote.
-# Пакеты, которые не удалось проверить заранее, попадают в UNKNOWN и всё равно
-# передаются в yay — тот выдаст понятную ошибку если пакет не существует.
-AUR_PKGS=(
-  # --- Браузеры ---
-  google-chrome
-  yandex-browser
-  brave-bin
+#
+# detect_gpu() анализирует вывод lspci, определяет производителя и заполняет
+# массив GPU_PKGS нужными пакетами из этой таблицы.
+#
+# Intel (встройка): требует mesa + vulkan-intel + VA-API драйверы.
+#   intel-media-driver  — VA-API для Broadwell и новее (iHD)
+#   libva-intel-driver  — VA-API для Ivy Bridge и старее (i965)
+#   Ставим оба: система сама выберет нужный по железу.
+#
+# AMD (дискретная / встройка): mesa + vulkan-radeon + libva-mesa-driver.
+#
+# NVIDIA (nouveau, свободный драйвер): mesa + libva-mesa-driver + vulkan-nouveau.
+#   Проприетарный nvidia в этом скрипте не ставится.
+#   Если нужен — замени пакеты вручную или добавь отдельную ветку ниже.
+#
+# VMware / VirtualBox (виртуалка): mesa + гостевые утилиты.
 
-  # --- Облако ---
-  yandex-disk
-
-  # --- Текстовые редакторы ---
-  notepadqq
-
-  # --- Почта ---
-  birdtray
-
-  # --- Обои (Wayland, анимация) ---
-  swww                             # Анимированные обои для Wayland (альтернатива hyprpaper)
-
-  # --- Мониторинг ---
-  neohtop
-  lazydocker
-
-  # --- Wayland-утилиты ---
-  xwaylandvideobridge              # Screen-share для XWayland-приложений (AUR, не в official)
-  ydotool                          # Замена xdotool для Wayland (эмуляция ввода)
-)
+GPU_PKGS=()   # заполняется в detect_gpu(), используется в main
 
 # =============================================================================
 # Карта конфигурационных файлов
@@ -277,10 +240,10 @@ AUR_PKGS=(
 #
 # Примеры записей:
 #   "alacritty:alacritty.toml"
-#       CONFIGS_SRC/alacritty/alacritty.toml  →  ~/.config/alacritty/alacritty.toml
+#       CONFIGS_SRC/alacritty/alacritty.toml  ->  ~/.config/alacritty/alacritty.toml
 #
 #   "rofi:themes"
-#       CONFIGS_SRC/rofi/themes/  →  ~/.config/rofi/themes/  (рекурсивно)
+#       CONFIGS_SRC/rofi/themes/  ->  ~/.config/rofi/themes/  (рекурсивно)
 #
 # Чтобы добавить конфиг — добавь строку. Чтобы временно отключить — закомментируй.
 
@@ -311,7 +274,6 @@ CONFIG_FILES=(
 )
 
 # Конфиги с чувствительными данными — копируются с правами 600 вместо 644.
-# Добавляй сюда файлы с паролями, токенами, ключами API.
 SENSITIVE_CONFIGS=(
   "rclone:rclone.conf"
 )
@@ -320,21 +282,13 @@ SENSITIVE_CONFIGS=(
 # Внутренние переменные состояния (не трогать вручную)
 # =============================================================================
 
-TMP_DIR=""          # временный каталог для сборки yay; очищается в cleanup()
-AUR_USER=""         # итоговый пользователь для AUR (определяется в main)
-AUR_HOME=""         # домашний каталог AUR_USER
-AUR_CACHE_DIR=""    # каталог кеша сборки AUR (~/.cache/yay-build)
-YAY_AVAILABLE=false # флаг: установлен ли yay на момент проверки пакетов
+TARGET_USER=""        # пользователь-владелец конфигов (определяется в main)
+TARGET_HOME=""        # домашний каталог TARGET_USER
 
-# Массивы результатов классификации пакетов (заполняются функциями split_*)
+# Массивы результатов классификации пакетов (заполняются функцией split_packages)
 REPO_INSTALLED=()
 REPO_TO_INSTALL=()
 REPO_NOT_FOUND=()
-
-AUR_INSTALLED=()
-AUR_TO_INSTALL=()
-AUR_NOT_FOUND=()
-AUR_UNKNOWN=()      # пакеты, статус которых не удалось проверить заранее
 
 # =============================================================================
 # Вспомогательные функции вывода
@@ -345,8 +299,6 @@ warn() { echo "[WARN]  $*" >&2; }
 die()  { echo "[ERROR] $*" >&2; exit 1; }
 
 usage() {
-  # Выводим справку из заголовка самого скрипта (блок между --- строками).
-  # sed вырезает первую строку shebang и блок комментариев до первой пустой строки.
   sed -n '/^# ={5}/,/^# ={5}/{ s/^# \?//; p }' "$0" | head -n -1
 }
 
@@ -355,7 +307,6 @@ usage() {
 # =============================================================================
 
 on_error() {
-  # Вызывается трапом ERR. Печатает номер строки и код выхода.
   local exit_code=$?
   local line_no="${1:-unknown}"
   echo "[ERROR] Сбой на строке ${line_no}, код выхода: ${exit_code}" >&2
@@ -363,23 +314,9 @@ on_error() {
 }
 
 cleanup() {
-  # Вызывается трапом EXIT (при любом завершении — нормальном или по ошибке).
-  # Удаляем временный каталог сборки yay.
-  if [[ -n "${TMP_DIR}" && -d "${TMP_DIR}" ]]; then
-    rm -rf -- "${TMP_DIR}"
-  fi
-
-  # Удаляем временный sudoers-файл.
-  # ВАЖНО: cleanup вызывается и при нормальном завершении, поэтому файл
-  # гарантированно удаляется даже если скрипт упал в середине.
-  if [[ -f "${TEMP_SUDOERS_FILE}" ]]; then
-    log "Удаляю временный sudoers-файл: ${TEMP_SUDOERS_FILE}"
-    rm -f -- "${TEMP_SUDOERS_FILE}"
-  fi
   return 0
 }
 
-# Регистрируем обработчики до разбора аргументов, чтобы любая ошибка была поймана.
 trap cleanup EXIT
 trap 'on_error $LINENO' ERR
 
@@ -393,10 +330,6 @@ while [[ $# -gt 0 ]]; do
       DRY_RUN=true
       shift
       ;;
-    --allow-temp-sudo)
-      ALLOW_TEMP_SUDO=true
-      shift
-      ;;
     --configs-only)
       CONFIGS_ONLY=true
       shift
@@ -404,17 +337,6 @@ while [[ $# -gt 0 ]]; do
     --no-configs)
       DEPLOY_CONFIGS=false
       shift
-      ;;
-    --jobs)
-      [[ $# -ge 2 ]] || die "Для --jobs нужно указать число"
-      [[ "$2" =~ ^[1-9][0-9]*$ ]] || die "--jobs должен быть положительным числом, получено: '$2'"
-      BUILD_JOBS="$2"
-      shift 2
-      ;;
-    --aur-user)
-      [[ $# -ge 2 ]] || die "Для --aur-user нужно указать имя пользователя"
-      AUR_USER_CLI="$2"
-      shift 2
       ;;
     --configs-src)
       [[ $# -ge 2 ]] || die "Для --configs-src нужно указать путь к каталогу"
@@ -431,7 +353,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# --configs-only и --no-configs несовместимы.
 if $CONFIGS_ONLY && ! $DEPLOY_CONFIGS; then
   die "--configs-only и --no-configs нельзя использовать одновременно."
 fi
@@ -451,49 +372,20 @@ run_cmd() {
   fi
 }
 
-# Выполняет команду от имени AUR_USER.
-# Предпочитает sudo (сохраняет окружение через -H), при его отсутствии — su.
-# При su явно указываем bash, чтобы не зависеть от login shell пользователя
-# и избежать проблем с интерпретацией кавычек в других оболочках.
-run_as_user() {
-  if command -v sudo >/dev/null 2>&1; then
-    sudo -H -u "${AUR_USER}" -- "$@"
-  else
-    # su: передаём аргументы через массив окружения, не через интерполяцию строки,
-    # чтобы пути с пробелами или спецсимволами не сломали команду.
-    su - "${AUR_USER}" -s /bin/bash -c "$(printf '%q ' "$@")"
-  fi
-}
-
-# Выполняет команду от имени AUR_USER — или выводит её в dry-run режиме.
-run_as_user_cmd() {
-  if $DRY_RUN; then
-    printf '[DRY-RUN as %s] ' "${AUR_USER}"
-    printf '%q ' "$@"
-    printf '\n'
-  else
-    run_as_user "$@"
-  fi
-}
-
 # =============================================================================
 # Вспомогательные функции
 # =============================================================================
 
 # Выводит список пакетов с заголовком.
-# Безопасно обрабатывает пустые массивы (совместимо с bash < 4.4 при set -u).
 print_list() {
   local title="$1"
   shift
-
   echo
   echo "==> ${title}"
-  # Проверяем аргументы безопасно: "$@" при set -u падает если нет аргументов.
   if [[ $# -eq 0 ]]; then
     echo "  (пусто)"
     return 0
   fi
-
   local item
   for item in "$@"; do
     echo "  - $item"
@@ -510,83 +402,199 @@ repo_exists() {
   pacman -Si "$1" >/dev/null 2>&1
 }
 
-# Проверяет существование пакета в AUR.
-# Возвращаемые коды:
-#   0 — пакет найден
-#   1 — пакет точно не существует (yay/git ответили "не найден")
-#   2 — проверить не удалось (нет yay и нет git, или сетевая ошибка)
-#
-# ВАЖНО: код 2 от git ls-remote может означать и сетевую ошибку, и отсутствие
-# пакета — мы не можем их различить без парсинга stderr. Поэтому такие пакеты
-# помечаются как UNKNOWN и всё равно передаются в yay, который сам разберётся.
-aur_exists() {
-  local pkg="$1"
-  local rc=0
-
-  if $YAY_AVAILABLE; then
-    # yay -Si возвращает 1 если пакет не найден, иное — при сетевой ошибке.
-    run_as_user yay -Si "$pkg" >/dev/null 2>&1 || rc=$?
-    return "$rc"
-  fi
-
-  if command -v git >/dev/null 2>&1; then
-    # git ls-remote возвращает 128 при недоступном репозитории (пакет не существует)
-    # и другие ненулевые коды при сетевых проблемах.
-    # Нормализуем: 128 → 1 (не найден), всё остальное ненулевое → 2 (неизвестно).
-    run_as_user git ls-remote \
-      "https://aur.archlinux.org/${pkg}.git" HEAD >/dev/null 2>&1 || rc=$?
-    if (( rc == 128 )); then
-      return 1   # репозиторий не существует = пакет не найден
-    elif (( rc != 0 )); then
-      return 2   # сетевая или иная ошибка = статус неизвестен
-    fi
-    return 0
-  fi
-
-  # Ни yay, ни git недоступны — проверить невозможно.
-  return 2
-}
-
-# Проверяет, что все пакеты из группы реально установлены.
-# Используется после установки как финальная верификация.
+# Проверяет, что все пакеты из переданного списка реально установлены.
 verify_installed_group() {
   local label="$1"
   shift
   local failed=()
   local pkg
-
-  # Безопасный обход: если массив пуст, цикл просто не выполняется.
   for pkg in "$@"; do
-    if ! is_installed "$pkg"; then
-      failed+=("$pkg")
-    fi
+    is_installed "$pkg" || failed+=("$pkg")
   done
-
   if (( ${#failed[@]} > 0 )); then
     warn "Следующие пакеты (${label}) не установлены после завершения:"
     printf '  - %s\n' "${failed[@]}"
     return 1
   fi
-
   log "Верификация (${label}): все пакеты на месте"
   return 0
+}
+
+# =============================================================================
+# Определение видеокарты и выбор драйверов
+# =============================================================================
+
+# Заполняет массив GPU_PKGS пакетами для найденных GPU.
+# Поддерживаются: Intel, AMD, NVIDIA (nouveau), VMware, VirtualBox.
+# Если GPU не распознан — предупреждение, скрипт продолжает работу.
+#
+# Логика: lspci фильтруется по классу VGA/3D/Display.
+# Один компьютер может иметь несколько GPU (iGPU + dGPU) — обрабатываем все.
+# Дублирующиеся пакеты (например mesa, если найдены Intel и AMD) дедуплицируются.
+detect_gpu() {
+  GPU_PKGS=()
+
+  if ! command -v lspci >/dev/null 2>&1; then
+    warn "lspci не найден — pciutils ещё не установлен."
+    warn "Пропускаю автоопределение GPU. Драйверы не будут установлены."
+    return 0
+  fi
+
+  # -mm: машиночитаемый формат (поля в кавычках через пробел).
+  # Пример строки: 00:02.0 "VGA compatible controller" "Intel Corporation"
+  #                         "UHD Graphics 620" -r07 "Apple Inc." "MacBook Air"
+  local lspci_out
+  lspci_out="$(lspci -mm | grep -iE '"(VGA compatible controller|3D controller|Display controller)"')" || true
+
+  if [[ -z "${lspci_out}" ]]; then
+    warn "GPU-устройства не обнаружены через lspci. Драйверы не будут установлены."
+    return 0
+  fi
+
+  # Флаги найденных производителей — не дублируем пакеты.
+  local found_intel=false
+  local found_amd=false
+  local found_nvidia=false
+  local found_vmware=false
+  local found_vbox=false
+
+  local line vendor
+  while IFS= read -r line; do
+    # В формате -mm поле Vendor — это 3-я пара кавычек (индекс 6 при разбивке по '"').
+    # Пример: 0 "" 1 "VGA..." 2 "" 3 "Intel..." -> cut -d'"' -f6
+    vendor="$(echo "${line}" | cut -d'"' -f6)"
+
+    case "${vendor}" in
+      *Intel*)
+        found_intel=true
+        log "  GPU: Intel — ${vendor}"
+        ;;
+      *AMD*|*ATI*|*"Advanced Micro"*)
+        found_amd=true
+        log "  GPU: AMD — ${vendor}"
+        ;;
+      *NVIDIA*)
+        found_nvidia=true
+        log "  GPU: NVIDIA — ${vendor}"
+        ;;
+      *VMware*)
+        found_vmware=true
+        log "  GPU: VMware (виртуалка) — ${vendor}"
+        ;;
+      *VirtualBox*|*InnoTek*)
+        found_vbox=true
+        log "  GPU: VirtualBox (виртуалка) — ${vendor}"
+        ;;
+      *)
+        warn "  GPU: нераспознанный производитель: '${vendor}'"
+        warn "       Полная строка lspci: ${line}"
+        warn "       Добавь обработку в detect_gpu() или установи драйверы вручную."
+        ;;
+    esac
+  done <<< "${lspci_out}"
+
+  # --- Intel ---
+  # mesa               — DRI через i965/iris/crocus
+  # vulkan-intel       — Vulkan через ANV (Broadwell+)
+  # intel-media-driver — VA-API для Broadwell и новее (iHD драйвер)
+  # libva-intel-driver — VA-API для Ivy Bridge и старее (i965 драйвер)
+  # Оба VA-API ставим вместе: система выберет нужный по железу через LIBVA_DRIVER_NAME.
+  if $found_intel; then
+    GPU_PKGS+=(
+      mesa
+      libva-mesa-driver
+      vulkan-intel
+      intel-media-driver
+      libva-intel-driver
+    )
+  fi
+
+  # --- AMD ---
+  # mesa              — DRI через radeonsi
+  # vulkan-radeon     — Vulkan через RADV
+  # libva-mesa-driver — VA-API через Gallium/radeonsi
+  if $found_amd; then
+    GPU_PKGS+=(
+      mesa
+      libva-mesa-driver
+      vulkan-radeon
+    )
+  fi
+
+  # --- NVIDIA (nouveau, свободный драйвер) ---
+  # mesa              — DRI через nouveau
+  # libva-mesa-driver — VA-API через Gallium/nouveau
+  # vulkan-nouveau    — Vulkan через NVK (требует mesa 24+)
+  # Если нужен проприетарный nvidia — замени эти пакеты на:
+  #   nvidia nvidia-utils libva-nvidia-driver
+  if $found_nvidia; then
+    GPU_PKGS+=(
+      mesa
+      libva-mesa-driver
+      vulkan-nouveau
+    )
+  fi
+
+  # --- VMware ---
+  # open-vm-tools      — интеграция с гипервизором (буфер обмена, resize)
+  # xf86-video-vmware  — 2D-ускорение для Xwayland
+  if $found_vmware; then
+    GPU_PKGS+=(
+      mesa
+      open-vm-tools
+      xf86-video-vmware
+    )
+  fi
+
+  # --- VirtualBox ---
+  # virtualbox-guest-utils — shared folders, clipboard, resize
+  if $found_vbox; then
+    GPU_PKGS+=(
+      mesa
+      virtualbox-guest-utils
+    )
+  fi
+
+  # Дедупликация: iGPU + dGPU дают дублирующиеся mesa и libva-mesa-driver.
+  # pacman --needed справится, но лог и вывод плана будут чище без дублей.
+  local dedup=()
+  local seen=""
+  local pkg
+  for pkg in "${GPU_PKGS[@]+"${GPU_PKGS[@]}"}"; do
+    if [[ ! " ${seen} " =~ " ${pkg} " ]]; then
+      dedup+=("${pkg}")
+      seen+=" ${pkg}"
+    fi
+  done
+  GPU_PKGS=("${dedup[@]+"${dedup[@]}"}")
+
+  if (( ${#GPU_PKGS[@]} > 0 )); then
+    log "Итоговые GPU-пакеты: ${GPU_PKGS[*]}"
+  else
+    warn "GPU-пакеты не определены. Проверь вывод lspci вручную."
+  fi
 }
 
 # =============================================================================
 # Классификация пакетов
 # =============================================================================
 
-# Распределяет PACMAN_PKGS по трём группам:
+# Распределяет объединённый список PACMAN_PKGS + GPU_PKGS по трём группам:
 #   REPO_INSTALLED  — уже установлены
 #   REPO_TO_INSTALL — есть в репо, нужно установить
-#   REPO_NOT_FOUND  — не найдены ни в одном репозитории (скрипт завершится с ошибкой)
-split_repo_packages() {
+#   REPO_NOT_FOUND  — не найдены в репозиториях (скрипт завершится с ошибкой)
+split_packages() {
   REPO_INSTALLED=()
   REPO_TO_INSTALL=()
   REPO_NOT_FOUND=()
 
+  local all_pkgs=("${PACMAN_PKGS[@]}")
+  if (( ${#GPU_PKGS[@]} > 0 )); then
+    all_pkgs+=("${GPU_PKGS[@]}")
+  fi
+
   local pkg
-  for pkg in "${PACMAN_PKGS[@]}"; do
+  for pkg in "${all_pkgs[@]}"; do
     if repo_exists "$pkg"; then
       if is_installed "$pkg"; then
         REPO_INSTALLED+=("$pkg")
@@ -599,224 +607,38 @@ split_repo_packages() {
   done
 }
 
-# Распределяет AUR_PKGS по четырём группам:
-#   AUR_INSTALLED  — уже установлены
-#   AUR_TO_INSTALL — найдены в AUR, нужно установить
-#   AUR_NOT_FOUND  — точно не существуют в AUR (скрипт завершится с ошибкой)
-#   AUR_UNKNOWN    — статус неизвестен; будут переданы в yay «на удачу»
-split_aur_packages() {
-  AUR_INSTALLED=()
-  AUR_TO_INSTALL=()
-  AUR_NOT_FOUND=()
-  AUR_UNKNOWN=()
-
-  local pkg rc
-  for pkg in "${AUR_PKGS[@]}"; do
-    rc=0
-    aur_exists "$pkg" || rc=$?
-
-    case "$rc" in
-      0)
-        # Пакет найден в AUR.
-        if is_installed "$pkg"; then
-          AUR_INSTALLED+=("$pkg")
-        else
-          AUR_TO_INSTALL+=("$pkg")
-        fi
-        ;;
-      1)
-        # Пакет точно не существует.
-        AUR_NOT_FOUND+=("$pkg")
-        ;;
-      2|*)
-        # Статус неизвестен (нет инструментов для проверки или сетевая ошибка).
-        # Если пакет уже установлен — считаем его установленным и не трогаем.
-        # Если не установлен — добавляем в UNKNOWN и передадим yay.
-        if is_installed "$pkg"; then
-          AUR_INSTALLED+=("$pkg")
-        else
-          AUR_UNKNOWN+=("$pkg")
-        fi
-        ;;
-    esac
-  done
-}
-
 # =============================================================================
-# Управление временными правами sudo
-# =============================================================================
-
-# Выдаёт AUR_USER временный NOPASSWD на /usr/bin/pacman.
-# Используется в unattended-режиме (CI, скрипты без интерактивного агента).
-# В обычном интерактивном сеансе НЕ нужен: yay сам запросит пароль через sudo.
-#
-# Безопасность:
-#   - Файл создаётся через mktemp, валидируется visudo перед установкой.
-#   - Удаляется в cleanup() при любом завершении скрипта (trap EXIT).
-#   - Права 0440 (read-only для root и группы).
-grant_temp_sudo() {
-  $DRY_RUN && {
-    log "DRY-RUN: создание временного sudoers-файла пропущено"
-    return 0
-  }
-
-  # Защита: если файл уже существует (остался от прошлого прерванного запуска),
-  # удаляем его перед созданием нового.
-  if [[ -f "${TEMP_SUDOERS_FILE}" ]]; then
-    warn "Найден старый временный sudoers-файл, удаляю: ${TEMP_SUDOERS_FILE}"
-    rm -f -- "${TEMP_SUDOERS_FILE}"
-  fi
-
-  log "Создаю временные права NOPASSWD для пользователя '${AUR_USER}'"
-
-  # Создаём файл во временном месте для валидации — не сразу в /etc/sudoers.d/.
-  local tmp_sudoers
-  tmp_sudoers="$(mktemp /tmp/sudoers-validate.XXXXXX)"
-
-  # Пишем содержимое. Heredoc без кавычек вокруг EOF позволяет подстановку переменных.
-  cat > "${tmp_sudoers}" <<EOF
-# Временный файл, создан install_software.sh. Удаляется автоматически.
-${AUR_USER} ALL=(root) NOPASSWD: /usr/bin/pacman
-Defaults:${AUR_USER} !requiretty
-EOF
-
-  # Валидируем синтаксис перед установкой — сломанный sudoers опасен.
-  if ! visudo -cf "${tmp_sudoers}" >/dev/null 2>&1; then
-    rm -f -- "${tmp_sudoers}"
-    die "Синтаксическая ошибка во временном sudoers-файле. Установка прервана."
-  fi
-
-  # install атомарно копирует файл с нужными правами.
-  install -m 0440 -o root -g root "${tmp_sudoers}" "${TEMP_SUDOERS_FILE}"
-  rm -f -- "${tmp_sudoers}"
-
-  log "Временный sudoers-файл установлен: ${TEMP_SUDOERS_FILE}"
-}
-
-# =============================================================================
-# Установка зависимостей и yay
+# Синхронизация баз и установка prereqs
 # =============================================================================
 
 # Синхронизирует базы пакетов (pacman -Sy).
-# Вызывается всегда — в том числе в dry-run — чтобы repo_exists() и pacman -Si
-# работали с актуальными данными, а не ложно сообщали "пакет не найден".
+# Выполняется всегда, в том числе в dry-run — это read-only операция,
+# необходимая для корректной работы repo_exists() / pacman -Si.
 sync_package_databases() {
   log "Синхронизирую базы пакетов (pacman -Sy)"
-  # В dry-run выполняем -Sy реально: это read-only операция (только скачивает
-  # метаданные), не меняет установленные пакеты и нужна для корректной проверки.
   pacman -Sy --noconfirm
 }
 
-# Обновляет систему и устанавливает git + base-devel.
-# ВНИМАНИЕ: -Syu обновляет всю систему — это стандартное поведение для Arch.
-# Частичное обновление (-S без -u) не поддерживается и может сломать систему.
-# Базы уже синхронизированы в sync_package_databases(), поэтому здесь просто -Su.
+# Устанавливает базовые prereqs и обновляет систему.
+# Базы уже синхронизированы в sync_package_databases(), поэтому -Su (без повторного -y).
+# pciutils устанавливается здесь, чтобы detect_gpu() мог вызвать lspci.
 install_build_prereqs() {
-  log "Устанавливаю git, base-devel и обновляю систему (pacman -Su)"
+  log "Устанавливаю pciutils, base-devel и обновляю систему (pacman -Su)"
   log "Это выполнит полное обновление системы — штатное поведение Arch Linux"
-  run_cmd pacman -Su --needed --noconfirm git base-devel
-}
-
-# Устанавливает yay если он ещё не установлен.
-# Сборка всегда выполняется от AUR_USER — makepkg запрещает запуск от root.
-install_yay_if_needed() {
-  if command -v yay >/dev/null 2>&1; then
-    YAY_AVAILABLE=true
-    log "yay уже установлен: $(yay --version 2>&1 | { read -r line; echo "$line"; })"
-    return 0
-  fi
-
-  YAY_AVAILABLE=false
-  log "yay не найден, выполняю сборку из AUR"
-
-  if $DRY_RUN; then
-    log "DRY-RUN: сборка yay пропущена. В реальном запуске yay будет собран первым."
-    return 0
-  fi
-
-  log "Создаю временный каталог для сборки yay"
-  # mktemp в домашнем каталоге пользователя — там точно есть права на запись.
-  TMP_DIR="$(mktemp -d "${AUR_HOME}/yay-build.XXXXXX")"
-  chown "${AUR_USER}:" "${TMP_DIR}"
-
-  log "Клонирую репозиторий yay от имени ${AUR_USER}"
-  run_as_user git clone --depth=1 https://aur.archlinux.org/yay.git "${TMP_DIR}/yay"
-
-  log "Собираю yay (jobs: ${BUILD_JOBS})"
-  # Передаём переменные сборки через окружение, а не через интерполяцию в строку.
-  # Это безопасно даже если пути содержат пробелы или спецсимволами.
-  run_as_user env \
-    MAKEFLAGS="-j${BUILD_JOBS}" \
-    BUILDDIR="${AUR_CACHE_DIR}" \
-    bash -c "cd $(printf '%q' "${TMP_DIR}/yay") && makepkg -s --noconfirm --needed"
-
-  # Ищем собранный пакет. Сортируем по времени модификации (-t) и берём новейший.
-  # Это защищает от ситуации, когда в каталоге остался пакет от предыдущей сборки.
-  local pkg_file=""
-  pkg_file="$(find "${TMP_DIR}/yay" -maxdepth 1 -type f \
-    \( -name 'yay-*.pkg.tar.zst' -o -name 'yay-*.pkg.tar.xz' \) \
-    -printf '%T@ %p\n' | sort -rn | head -n1 | cut -d' ' -f2-)"
-
-  [[ -n "${pkg_file}" ]] || die "Не удалось найти собранный пакет yay в ${TMP_DIR}/yay"
-
-  log "Устанавливаю yay от root: $(basename "${pkg_file}")"
-  pacman -U --noconfirm "${pkg_file}"
-
-  command -v yay >/dev/null 2>&1 || die "yay не обнаружен после установки — что-то пошло не так"
-  YAY_AVAILABLE=true
-  log "yay успешно установлен: $(yay --version 2>&1 | { read -r line; echo "$line"; })"
+  run_cmd pacman -Su --needed --noconfirm pciutils base-devel
 }
 
 # =============================================================================
 # Установка пакетов
 # =============================================================================
 
-install_repo_packages() {
+install_packages() {
   if (( ${#REPO_TO_INSTALL[@]} == 0 )); then
-    log "Все repo-пакеты уже установлены, пропускаю"
+    log "Все пакеты уже установлены, пропускаю"
     return 0
   fi
-
-  log "Устанавливаю ${#REPO_TO_INSTALL[@]} repo-пакет(ов) через pacman"
+  log "Устанавливаю ${#REPO_TO_INSTALL[@]} пакет(ов) через pacman"
   run_cmd pacman -S --needed --noconfirm "${REPO_TO_INSTALL[@]}"
-}
-
-install_aur_packages() {
-  # Объединяем проверенные и непроверенные пакеты в один список для yay.
-  # Безопасное обращение к массивам: используем промежуточные переменные.
-  local targets=()
-  if (( ${#AUR_TO_INSTALL[@]} > 0 )); then
-    targets+=("${AUR_TO_INSTALL[@]}")
-  fi
-
-  if (( ${#AUR_UNKNOWN[@]} > 0 )); then
-    warn "Следующие AUR-пакеты не удалось проверить заранее (передаю в yay напрямую):"
-    printf '  - %s\n' "${AUR_UNKNOWN[@]}"
-    targets+=("${AUR_UNKNOWN[@]}")
-  fi
-
-  if (( ${#targets[@]} == 0 )); then
-    log "Все AUR-пакеты уже установлены, пропускаю"
-    return 0
-  fi
-
-  log "Устанавливаю ${#targets[@]} AUR-пакет(ов) через yay"
-  log "Каталог кеша сборки: ${AUR_CACHE_DIR}"
-  log "Число jobs: ${BUILD_JOBS}"
-
-  # Создаём каталог кеша от имени пользователя.
-  run_as_user_cmd mkdir -p "${AUR_CACHE_DIR}"
-
-  run_as_user_cmd yay -S \
-    --needed \
-    --noconfirm \
-    --builddir "${AUR_CACHE_DIR}" \
-    --norebuild \
-    --mflags "-j${BUILD_JOBS}" \
-    --answerclean None \
-    --answerdiff None \
-    --answeredit None \
-    "${targets[@]}"
 }
 
 # =============================================================================
@@ -824,7 +646,6 @@ install_aur_packages() {
 # =============================================================================
 
 # Проверяет, входит ли запись "app:file" в список SENSITIVE_CONFIGS.
-# Такие файлы копируются с правами 600 вместо 644.
 is_sensitive_config() {
   local entry="$1"
   local s
@@ -835,51 +656,42 @@ is_sensitive_config() {
 }
 
 # Создаёт резервную копию файла или каталога с суффиксом .bak.YYYYMMDD_HHMMSS.
-# Если цель не существует — молча ничего не делает.
-# Хранится только одна резервная копия: новая перезаписывает старую при
-# совпадении секунды (на практике не происходит при нормальной работе).
 backup_if_exists() {
   local target="$1"
   [[ -e "${target}" || -L "${target}" ]] || return 0
-
   local backup="${target}.bak.$(date '+%Y%m%d_%H%M%S')"
   if $DRY_RUN; then
-    log "    DRY-RUN: резервная копия  ${target}  →  $(basename "${backup}")"
+    log "    DRY-RUN: резервная копия  ${target}  ->  $(basename "${backup}")"
   else
-    # -a: сохраняем права, время, симлинки.
-    # --remove-destination: заменяем существующий .bak если он есть.
     cp -a --remove-destination "${target}" "${backup}"
     log "    Резервная копия: $(basename "${backup}")"
   fi
 }
 
 # Копирует один файл или каталог из src в dst.
-# $3 = "sensitive" → chmod 600; иначе → chmod 644.
+# mode="sensitive" -> chmod 600; иначе -> chmod 644.
 deploy_item() {
   local src="$1"
   local dst="$2"
   local mode="${3:-normal}"
 
   if [[ -d "${src}" ]]; then
-    # Источник — каталог: копируем содержимое рекурсивно.
     if $DRY_RUN; then
-      log "    DRY-RUN: cp -a  ${src}/  →  ${dst}/"
+      log "    DRY-RUN: cp -a  ${src}/  ->  ${dst}/"
     else
       mkdir -p "${dst}"
       cp -a "${src}/." "${dst}/"
-      # Скрипт запущен от root — меняем владельца на целевого пользователя.
-      chown -R "${AUR_USER}:" "${dst}"
+      chown -R "${TARGET_USER}:" "${dst}"
       log "    Каталог: ${dst}/"
     fi
   else
-    # Источник — файл.
     if $DRY_RUN; then
       local perm; [[ "${mode}" == "sensitive" ]] && perm="600" || perm="644"
-      log "    DRY-RUN: cp  ${src}  →  ${dst}  (${perm})"
+      log "    DRY-RUN: cp  ${src}  ->  ${dst}  (${perm})"
     else
       mkdir -p "$(dirname "${dst}")"
       cp -a "${src}" "${dst}"
-      chown "${AUR_USER}:" "${dst}"
+      chown "${TARGET_USER}:" "${dst}"
       if [[ "${mode}" == "sensitive" ]]; then
         chmod 600 "${dst}"
         log "    Файл (600): ${dst}"
@@ -900,10 +712,9 @@ deploy_configs() {
   log "-------------------------------------------------------"
   log "Развёртывание конфигурационных файлов"
   log "  Источник:    ${CONFIGS_SRC}"
-  log "  Назначение:  ${AUR_HOME}/.config/"
+  log "  Назначение:  ${TARGET_HOME}/.config/"
   log "-------------------------------------------------------"
 
-  # Проверяем что каталог-источник существует.
   if [[ ! -d "${CONFIGS_SRC}" ]]; then
     warn "Каталог конфигов не найден: ${CONFIGS_SRC}"
     warn "Ожидаемая структура:"
@@ -927,12 +738,10 @@ deploy_configs() {
   local entry app item src dst
 
   for entry in "${CONFIG_FILES[@]}"; do
-    # Разбиваем "приложение:файл" на две части.
     app="${entry%%:*}"
     item="${entry##*:}"
-
     src="${CONFIGS_SRC}/${app}/${item}"
-    dst="${AUR_HOME}/.config/${app}/${item}"
+    dst="${TARGET_HOME}/.config/${app}/${item}"
 
     if [[ ! -e "${src}" ]]; then
       warn "Источник не найден, пропускаю: ${src}"
@@ -941,11 +750,8 @@ deploy_configs() {
     fi
 
     log "  ${app}/${item}"
-
-    # Резервная копия существующего файла перед заменой.
     backup_if_exists "${dst}"
 
-    # Определяем режим прав: 600 для чувствительных, 644 для остальных.
     local mode="normal"
     is_sensitive_config "${entry}" && mode="sensitive"
 
@@ -956,7 +762,6 @@ deploy_configs() {
   echo
   log "Конфиги: развёрнуто — ${deployed}, пропущено (нет источника) — ${skipped}"
 
-  # Отдельное напоминание про rclone.conf если он был в списке.
   if ! $DRY_RUN; then
     local e
     for e in "${CONFIG_FILES[@]}"; do
@@ -988,118 +793,85 @@ main() {
     || die "База pacman заблокирована (/var/lib/pacman/db.lck). \
 Убедись, что pacman не запущен, и удали файл блокировки вручную."
 
-  # Инициализируем лог-файл до exec-редиректа.
   touch "${LOG_FILE}" 2>/dev/null \
     || die "Не могу создать лог-файл: ${LOG_FILE}. Проверь права на /var/log/."
 
-  # Лог может содержать имена пользователей и пути — ограничиваем доступ.
   if ! chmod 600 "${LOG_FILE}" 2>/dev/null; then
     warn "Не удалось установить права 600 на ${LOG_FILE}"
   fi
 
-  # Перенаправляем весь вывод в лог + терминал одновременно.
   exec > >(tee -a "${LOG_FILE}") 2>&1
 
   log "======================================================="
   log "Запуск install_software.sh — $(date '+%Y-%m-%d %H:%M:%S')"
   log "======================================================="
 
-  $DRY_RUN      && log "Режим DRY-RUN: реальных изменений не будет"
-  $CONFIGS_ONLY && log "Режим --configs-only: установка пакетов пропущена"
+  $DRY_RUN        && log "Режим DRY-RUN: реальных изменений не будет"
+  $CONFIGS_ONLY   && log "Режим --configs-only: установка пакетов пропущена"
   $DEPLOY_CONFIGS || log "Флаг --no-configs: развёртывание конфигов пропущено"
 
   # -------------------------------------------------------------------------
-  # Определение пользователя для AUR и конфигов
+  # Определение пользователя для конфигов
   # -------------------------------------------------------------------------
 
-  if [[ -n "${AUR_USER_CLI:-}" ]]; then
-    # Пользователь задан явно через --aur-user.
-    AUR_USER="${AUR_USER_CLI}"
-  elif [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
-    # sudo автоматически выставляет SUDO_USER в имя вызвавшего пользователя.
-    # Это стандартный случай: sudo ./install_software.sh
-    AUR_USER="${SUDO_USER}"
+  if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
+    TARGET_USER="${SUDO_USER}"
   else
-    die "Не удалось определить пользователя для AUR. \
-Запусти через sudo от обычного пользователя, или укажи --aur-user USERNAME."
+    die "Не удалось определить пользователя. \
+Запусти через sudo от обычного пользователя: sudo ./install_software.sh"
   fi
 
-  # makepkg запрещает сборку от root; конфиги тоже не должны принадлежать root.
-  [[ "${AUR_USER}" != "root" ]] \
-    || die "Нельзя использовать root. \
-Укажи непривилегированного пользователя через --aur-user."
+  [[ "${TARGET_USER}" != "root" ]] \
+    || die "Нельзя использовать root. Запусти через sudo от обычного пользователя."
 
-  # Проверяем существование пользователя.
-  id "${AUR_USER}" >/dev/null 2>&1 \
-    || die "Пользователь '${AUR_USER}' не существует в системе."
+  id "${TARGET_USER}" >/dev/null 2>&1 \
+    || die "Пользователь '${TARGET_USER}' не существует в системе."
 
   # getent надёжнее $HOME при sudo — читает /etc/passwd напрямую.
-  AUR_HOME="$(getent passwd "${AUR_USER}" | cut -d: -f6)"
-  [[ -n "${AUR_HOME:-}" && -d "${AUR_HOME}" ]] \
-    || die "Домашний каталог пользователя '${AUR_USER}' не найден: '${AUR_HOME}'"
+  TARGET_HOME="$(getent passwd "${TARGET_USER}" | cut -d: -f6)"
+  [[ -n "${TARGET_HOME:-}" && -d "${TARGET_HOME}" ]] \
+    || die "Домашний каталог пользователя '${TARGET_USER}' не найден: '${TARGET_HOME}'"
 
-  AUR_CACHE_DIR="${AUR_HOME}/.cache/yay-build"
-
-  log "Пользователь:        ${AUR_USER}"
-  log "Домашний каталог:    ${AUR_HOME}"
-  log "Каталог кеша AUR:    ${AUR_CACHE_DIR}"
+  log "Пользователь:        ${TARGET_USER}"
+  log "Домашний каталог:    ${TARGET_HOME}"
   log "Каталог конфигов:    ${CONFIGS_SRC}"
   log "Лог-файл:            ${LOG_FILE}"
-  log "Число jobs:          ${BUILD_JOBS}"
-
-  # -------------------------------------------------------------------------
-  # Защита от sudoers-файла оставшегося после kill -9
-  # (trap EXIT в таком случае не выполняется).
-  # -------------------------------------------------------------------------
-  if [[ -f "${TEMP_SUDOERS_FILE}" ]]; then
-    warn "Найден sudoers-файл от предыдущего запуска, удаляю: ${TEMP_SUDOERS_FILE}"
-    rm -f -- "${TEMP_SUDOERS_FILE}"
-  fi
 
   # -------------------------------------------------------------------------
   # Установка пакетов (пропускается при --configs-only)
   # -------------------------------------------------------------------------
 
   if ! $CONFIGS_ONLY; then
-    # 1. При необходимости выдаём временные права sudo для pacman.
-    $ALLOW_TEMP_SUDO && grant_temp_sudo
 
-    # 2. Синхронизируем базы пакетов (выполняется всегда, в том числе в dry-run).
-    #    Без этого repo_exists() будет работать на устаревших данных и ложно
-    #    сообщать "пакет не найден" для пакетов, появившихся после последнего -Sy.
+    # 1. Синхронизируем базы (выполняется всегда, включая dry-run).
     sync_package_databases
 
-    # 3. Обновляем систему и устанавливаем инструменты сборки (пропускается в dry-run).
+    # 2. Устанавливаем prereqs и обновляем систему (пропускается в dry-run).
+    #    После этого шага lspci гарантированно доступен.
     install_build_prereqs
 
-    # 4. Классифицируем repo-пакеты (до установки yay — не нужен).
-    split_repo_packages
+    # 3. Определяем GPU и формируем GPU_PKGS.
+    log "Определяю видеокарту..."
+    detect_gpu
 
-    # 4. Устанавливаем yay если нет, затем классифицируем AUR-пакеты
-    #    (yay нужен для точной проверки через yay -Si).
-    install_yay_if_needed
-    split_aur_packages
+    # 4. Классифицируем все пакеты: базовые (PACMAN_PKGS) + GPU (GPU_PKGS).
+    split_packages
 
     # Вывод плана установки.
-    print_list "Repo: уже установлены"   "${REPO_INSTALLED[@]+"${REPO_INSTALLED[@]}"}"
-    print_list "Repo: будут установлены" "${REPO_TO_INSTALL[@]+"${REPO_TO_INSTALL[@]}"}"
-    print_list "Repo: НЕ НАЙДЕНЫ"        "${REPO_NOT_FOUND[@]+"${REPO_NOT_FOUND[@]}"}"
-    print_list "AUR:  уже установлены"   "${AUR_INSTALLED[@]+"${AUR_INSTALLED[@]}"}"
-    print_list "AUR:  будут установлены" "${AUR_TO_INSTALL[@]+"${AUR_TO_INSTALL[@]}"}"
-    print_list "AUR:  НЕ НАЙДЕНЫ"        "${AUR_NOT_FOUND[@]+"${AUR_NOT_FOUND[@]}"}"
-    print_list "AUR:  статус неизвестен (будут переданы в yay)" \
-      "${AUR_UNKNOWN[@]+"${AUR_UNKNOWN[@]}"}"
+    print_list "GPU-пакеты (определены автоматически)" \
+      "${GPU_PKGS[@]+"${GPU_PKGS[@]}"}"
+    print_list "Уже установлены"   "${REPO_INSTALLED[@]+"${REPO_INSTALLED[@]}"}"
+    print_list "Будут установлены" "${REPO_TO_INSTALL[@]+"${REPO_TO_INSTALL[@]}"}"
+    print_list "НЕ НАЙДЕНЫ в репо" "${REPO_NOT_FOUND[@]+"${REPO_NOT_FOUND[@]}"}"
     echo
 
-    # Останавливаемся если есть пакеты, которых точно не существует.
-    # Лучше упасть здесь, чем потратить время на установку и упасть в середине.
-    if (( ${#REPO_NOT_FOUND[@]} > 0 || ${#AUR_NOT_FOUND[@]} > 0 )); then
+    if (( ${#REPO_NOT_FOUND[@]} > 0 )); then
       die "Обнаружены несуществующие пакеты (см. выше). \
-Исправь списки PACMAN_PKGS / AUR_PKGS и запусти снова."
+Исправь PACMAN_PKGS или таблицу GPU-пакетов в detect_gpu() и запусти снова."
     fi
 
-    install_repo_packages
-    install_aur_packages
+    # 5. Устанавливаем.
+    install_packages
   fi
 
   # -------------------------------------------------------------------------
@@ -1112,25 +884,29 @@ main() {
   # Финальная верификация (только в реальном режиме)
   # -------------------------------------------------------------------------
 
-  if ! $DRY_RUN; then
-    local verification_failed=false
-
-    if ! $CONFIGS_ONLY; then
-      verify_installed_group "repo" "${PACMAN_PKGS[@]}" || verification_failed=true
-      verify_installed_group "aur"  "${AUR_PKGS[@]}"    || verification_failed=true
+  if ! $DRY_RUN && ! $CONFIGS_ONLY; then
+    local all_pkgs=("${PACMAN_PKGS[@]}")
+    if (( ${#GPU_PKGS[@]} > 0 )); then
+      all_pkgs+=("${GPU_PKGS[@]}")
     fi
+
+    local verification_failed=false
+    verify_installed_group "все пакеты" "${all_pkgs[@]}" || verification_failed=true
 
     if $verification_failed; then
-      die "Верификация не прошла: часть пакетов не установлена. Проверь лог: ${LOG_FILE}"
+      die "Верификация не прошла: часть пакетов не установлена. \
+Проверь лог: ${LOG_FILE}"
     fi
+  fi
 
-    log "======================================================="
-    log "Завершено успешно — $(date '+%Y-%m-%d %H:%M:%S')"
-    log "======================================================="
-  else
+  if $DRY_RUN; then
     log "======================================================="
     log "DRY-RUN завершён. Реальных изменений не было."
     log "Для запуска установки уберите флаг --dry-run."
+    log "======================================================="
+  else
+    log "======================================================="
+    log "Завершено успешно — $(date '+%Y-%m-%d %H:%M:%S')"
     log "======================================================="
   fi
 }
