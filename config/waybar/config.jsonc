@@ -84,12 +84,16 @@
 
     "network": {
         // Показываем осмысленную метку при отсутствии соединения
+        "interface": "",                        // оставьте пустым — автоопределение
         "format": " disconnected",
-        "format-wifi": "  {signalStrength}%",
-        "format-ethernet": "  {ifname}",
+        "format-wifi": "  {essid} {signalStrength}%",
+        "format-ethernet": "  {ifname} {ipaddr}",
         "format-disconnected": " disconnected",
-        "tooltip-format-wifi": "SSID: {essid}\nIP: {ipaddr}\nСигнал: {signalStrength}%",
-        "tooltip-format-ethernet": "IP: {ipaddr}\n↓ {bandwidthDownBits}  ↑ {bandwidthUpBits}"
+        "tooltip-format-wifi": "SSID: {essid}\nIP: {ipaddr}\nСигнал: {signalStrength}%\n↓ {bandwidthDownBits}  ↑ {bandwidthUpBits}",
+        "tooltip-format-ethernet": "Интерфейс: {ifname}\nIP: {ipaddr}\n↓ {bandwidthDownBits}  ↑ {bandwidthUpBits}",
+        "tooltip-format-disconnected": "Нет соединения",
+        "on-click": "nm-connection-editor",     // открывает Network Manager GUI
+        "interval": 5
     },
 
     "battery": {

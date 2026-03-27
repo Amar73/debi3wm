@@ -121,3 +121,19 @@
 #custom-keyboard.us {
     color: #cba6f7;
 }
+
+#network {
+    padding: 0 10px;
+}
+
+#network.wifi {
+    color: var(--accent);
+}
+
+#network.ethernet {
+    color: #a6e3a1;    /* зелёный */
+}
+
+#network.disconnected {
+    color: var(--warn);
+}
