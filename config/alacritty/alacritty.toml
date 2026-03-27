@@ -7,19 +7,19 @@ import = [
 size = 14
 
   [font.bold]
-  family = "UbuntuMono Nerd Font"
+  family = "JetBrainsMono Nerd Font"
   style = "Heavy"
 
   [font.bold_italic]
-  family = "UbuntuMono Nerd Font"
+  family = "JetBrainsMono Nerd Font"
   style = "Heavy Italic"
 
   [font.italic]
-  family = "UbuntuMono Nerd Font"
+  family = "JetBrainsMono Nerd Font"
   style = "Medium Italic"
 
   [font.normal]
-  family = "UbuntuMono Nerd Font"
+  family = "JetBrainsMono Nerd Font"
   style = "Medium"
 
 [[keyboard.bindings]]
