@@ -4,8 +4,18 @@
 # Репо: https://github.com/Amar73/debi3wm
 #
 # ИСПОЛЬЗОВАНИЕ:
+#   # Клонировать репо (пока по HTTPS, до настройки ключа)
 #   git clone https://github.com/Amar73/debi3wm.git ~/debi3wm
 #   cd ~/debi3wm && chmod +x setup.sh && ./setup.sh
+#
+# ЧТО ДЕЛАЕТ СКРИПТ:
+#   1. Настраивает git
+#   2. Генерирует SSH ключ
+#   3. Загружает ключ на GitHub через gh или curl+token
+#   4. Устанавливает SSH config из репо (с исправлением IdentityAgent→IdentityFile)
+#   5. Переключает git remote на SSH
+#   6. Разворачивает конфиги в ~/.config/ (с исправлением хардкодов)
+#   7. Устанавливает .bashrc и создаёт нужные директории
 # =============================================================================
 
 set -euo pipefail
@@ -45,53 +55,61 @@ else
 fi
 
 # =============================================================================
-step "3/8  Загрузка SSH-ключа на GitHub"
+step "3/8  Загрузка SSH-ключа на GitHub (без браузера на этой машине)"
 echo
-echo "${BLUE}Твой публичный ключ:${RESET}"
-echo "──────────────────────────────────────────────────────────"
+echo "${BLUE}Публичный ключ:${RESET}"
+echo "──────────────────────────────────────────────────────────────"
 cat "${SSH_KEY}.pub"
-echo "──────────────────────────────────────────────────────────"
+echo "──────────────────────────────────────────────────────────────"
 echo
 
 if command -v gh >/dev/null 2>&1; then
-    log "Найден GitHub CLI — используем gh"
+    # Вариант A: GitHub CLI — лучший вариант
+    log "Найден GitHub CLI (gh)"
     if ! gh auth status >/dev/null 2>&1; then
-        echo "Авторизация: выбери GitHub.com → SSH → Login with a web browser"
-        echo "На телефоне открой github.com/login/device и введи код с экрана"
+        echo "Авторизация через gh:"
+        echo "  1. Выбери: GitHub.com"
+        echo "  2. Выбери: SSH"
+        echo "  3. Выбери: Login with a web browser"
+        echo "  4. На телефоне открой github.com/login/device и введи код с экрана"
         gh auth login --hostname github.com --git-protocol ssh --web
     else
         log "gh уже авторизован"
     fi
     KEY_TITLE="arch-$(hostname)-$(date +%Y%m%d)"
-    if gh ssh-key list 2>/dev/null | grep -q "$(cut -d' ' -f2 "${SSH_KEY}.pub")"; then
+    if gh ssh-key list 2>/dev/null | grep -qF "$(cut -d' ' -f2 "${SSH_KEY}.pub")"; then
         log "Ключ уже есть на GitHub"
     else
-        gh ssh-key add "${SSH_KEY}.pub" --title "$KEY_TITLE" && log "Ключ загружен: $KEY_TITLE"
+        gh ssh-key add "${SSH_KEY}.pub" --title "$KEY_TITLE" \
+            && log "Ключ загружен: $KEY_TITLE"
     fi
 else
-    warn "github-cli не установлен. Варианты добавления ключа:"
+    # Вариант Б: curl + Personal Access Token
+    warn "github-cli не установлен."
     echo
-    echo "  А) Через curl + Personal Access Token (на телефоне):"
-    echo "     github.com → Settings → Developer settings → Tokens (classic)"
-    echo "     → New → поставить галку admin:public_key → Generate"
+    echo "  Вариант Б — через curl + Personal Access Token:"
+    echo "  На телефоне: github.com → Settings → Developer settings"
+    echo "               → Tokens (classic) → New → scope: admin:public_key"
     echo
-    read -rp "  Вставь токен (или Enter чтобы добавить вручную): " GH_TOKEN
+    read -rp "  Вставь токен (или Enter чтобы добавить ключ вручную позже): " GH_TOKEN
     if [[ -n "${GH_TOKEN:-}" ]]; then
-        PUB_KEY=$(cat "${SSH_KEY}.pub")
         HTTP_CODE=$(curl -s -o /tmp/gh_resp.json -w "%{http_code}" \
             -X POST \
             -H "Authorization: token $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/user/keys \
-            -d "{\"title\":\"arch-$(hostname)\",\"key\":\"$PUB_KEY\"}")
-        [[ "$HTTP_CODE" == "201" ]] \
-            && log "Ключ загружен на GitHub (HTTP 201)" \
-            || { warn "Ошибка HTTP $HTTP_CODE"; cat /tmp/gh_resp.json; echo; \
-                 warn "Добавь ключ вручную на github.com"; \
-                 read -rp "  Нажми Enter после добавления... "; }
+            -d "{\"title\":\"arch-$(hostname)\",\"key\":\"$(cat "${SSH_KEY}.pub")\"}")
+        if [[ "$HTTP_CODE" == "201" ]]; then
+            log "Ключ загружен на GitHub (HTTP 201)"
+        else
+            warn "Ошибка HTTP $HTTP_CODE"
+            cat /tmp/gh_resp.json 2>/dev/null; echo
+            warn "Добавь ключ вручную: github.com → Settings → SSH keys → New SSH key"
+            read -rp "  Нажми Enter после добавления... "
+        fi
     else
-        echo "  Б) Вручную: github.com → Settings → SSH and GPG keys → New SSH key"
-        echo "     Вставь содержимое файла выше"
+        echo "  Вручную: github.com → Settings → SSH and GPG keys → New SSH key"
+        echo "  Вставь содержимое ключа выше"
         read -rp "  Нажми Enter после добавления ключа... "
     fi
 fi
@@ -101,25 +119,36 @@ step "4/8  Проверка SSH-соединения с GitHub"
 eval "$(ssh-agent -s)" > /dev/null 2>&1 || true
 ssh-add "$SSH_KEY" 2>/dev/null || true
 
-ssh -T git@github.com -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new 2>&1 \
-    | grep -q "successfully" \
+ssh -T git@github.com \
+    -o ConnectTimeout=10 \
+    -o StrictHostKeyChecking=accept-new \
+    2>&1 | grep -q "successfully" \
     && log "GitHub SSH: OK" \
-    || warn "GitHub SSH: не подтверждено (это нормально если ключ только что добавлен)"
+    || warn "GitHub SSH: не подтверждено (нормально если ключ только что добавлен)"
 
 # =============================================================================
-step "5/8  SSH config из репо"
-SSH_CONFIG_SRC="$REPO_DIR/319/ssh/config"
+step "5/8  SSH config"
 
-if [[ -f ~/.ssh/config ]]; then
-    cp ~/.ssh/config ~/.ssh/config.bak.$(date '+%Y%m%d_%H%M%S')
-fi
+# Бэкап старого конфига
+[[ -f ~/.ssh/config ]] \
+    && cp ~/.ssh/config ~/.ssh/config.bak.$(date '+%Y%m%d_%H%M%S')
 
-if [[ -f "$SSH_CONFIG_SRC" ]]; then
-    # Исправляем баг: IdentityAgent с путём к ключу → IdentityFile
+SSH_CONFIG_SRC="$REPO_DIR/319/ssh_config_amar319"  # это аннотированная версия
+SSH_CONFIG_MIN="$REPO_DIR/319/ssh/config"           # это рабочая версия
+
+if [[ -f "$SSH_CONFIG_MIN" ]]; then
+    # Копируем рабочий конфиг, исправляем баг: IdentityAgent с путём к ключу
     sed 's|IdentityAgent ~/.ssh/id_ed25519|IdentityFile ~/.ssh/id_ed25519|g' \
-        "$SSH_CONFIG_SRC" > ~/.ssh/config
-    log "SSH config из репо (исправлен IdentityAgent)"
+        "$SSH_CONFIG_MIN" > ~/.ssh/config
+    log "SSH config установлен из 319/ssh/config (исправлен IdentityAgent)"
+elif [[ -f "$SSH_CONFIG_SRC" ]]; then
+    # Используем аннотированную версию, убираем комментарии и исправляем баг
+    grep -v '^[[:space:]]*#' "$SSH_CONFIG_SRC" \
+        | sed 's|IdentityAgent ~/.ssh/id_ed25519|IdentityFile ~/.ssh/id_ed25519|g' \
+        > ~/.ssh/config
+    log "SSH config установлен из 319/ssh_config_amar319"
 else
+    # Минимальный конфиг если нет файлов в репо
     cat > ~/.ssh/config << 'EOF'
 Host github.com
     HostName github.com
@@ -164,7 +193,7 @@ Host *
     ControlPath ~/.ssh/ctrl-%r@%h:%p
     ControlPersist 10m
 EOF
-    log "SSH config создан из шаблона"
+    log "SSH config создан из встроенного шаблона"
 fi
 chmod 600 ~/.ssh/config
 
@@ -180,7 +209,7 @@ else
 fi
 
 # =============================================================================
-step "7/8  Развёртывание конфигов"
+step "7/8  Развёртывание конфигов в ~/.config/"
 
 CONFIG_SRC="$REPO_DIR/config"
 CONFIG_DST="$HOME/.config"
@@ -191,28 +220,33 @@ deploy() {
     mkdir -p "$(dirname "$dst")"
     [[ -e "$dst" ]] && cp -a "$dst" "${dst}.bak.$(date '+%Y%m%d_%H%M%S')" 2>/dev/null || true
     cp -a "$src" "$dst"
-    log "  ✓ $(realpath --relative-to="$CONFIG_DST" "$dst" 2>/dev/null || basename "$dst")"
+    log "  ✓ $(basename "$dst")"
 }
 
 # Alacritty
-deploy "$CONFIG_SRC/alacritty/alacritty.toml" "$CONFIG_DST/alacritty/alacritty.toml"
+deploy "$CONFIG_SRC/alacritty/alacritty.toml" \
+       "$CONFIG_DST/alacritty/alacritty.toml"
 
-# Dunst — исправляем #1121DCC (7 hex символов) → #11121D
+# Dunst — исправляем невалидный цвет: #1121DCC (7 hex) → #11121D (6 hex)
 mkdir -p "$CONFIG_DST/dunst"
-[[ -f "$CONFIG_SRC/dunst/dunstrc" ]] && \
+if [[ -f "$CONFIG_SRC/dunst/dunstrc" ]]; then
     sed 's|background = "#1121DCC"|background = "#11121D"|g' \
-        "$CONFIG_SRC/dunst/dunstrc" > "$CONFIG_DST/dunst/dunstrc" && \
-    log "  ✓ dunst/dunstrc (исправлен невалидный hex-цвет)"
+        "$CONFIG_SRC/dunst/dunstrc" > "$CONFIG_DST/dunst/dunstrc"
+    log "  ✓ dunstrc (исправлен невалидный hex-цвет)"
+fi
 
-# Hyprland
+# Hyprland (если есть конфиги в репо)
 mkdir -p "$CONFIG_DST/hypr"
 for f in hyprland.conf hyprpaper.conf hyprlock.conf hypridle.conf; do
-    [[ -f "$CONFIG_SRC/hypr/$f" ]] && deploy "$CONFIG_SRC/hypr/$f" "$CONFIG_DST/hypr/$f"
+    [[ -f "$CONFIG_SRC/hypr/$f" ]] \
+        && deploy "$CONFIG_SRC/hypr/$f" "$CONFIG_DST/hypr/$f" \
+        || warn "  ! config/hypr/$f не найден в репо (создай и добавь в git)"
 done
 
 # Waybar
 for f in config.jsonc style.css; do
-    [[ -f "$CONFIG_SRC/waybar/$f" ]] && deploy "$CONFIG_SRC/waybar/$f" "$CONFIG_DST/waybar/$f"
+    [[ -f "$CONFIG_SRC/waybar/$f" ]] \
+        && deploy "$CONFIG_SRC/waybar/$f" "$CONFIG_DST/waybar/$f"
 done
 if [[ -d "$CONFIG_SRC/waybar/scripts" ]]; then
     mkdir -p "$CONFIG_DST/waybar/scripts"
@@ -222,15 +256,14 @@ if [[ -d "$CONFIG_SRC/waybar/scripts" ]]; then
 fi
 
 # Picom
-deploy "$CONFIG_SRC/picom/picom.conf" "$CONFIG_DST/picom/picom.conf"
-
-# Rofi
-deploy "$CONFIG_SRC/rofi/config.rasi" "$CONFIG_DST/rofi/config.rasi"
+[[ -f "$CONFIG_SRC/picom/picom.conf" ]] \
+    && deploy "$CONFIG_SRC/picom/picom.conf" "$CONFIG_DST/picom/picom.conf"
 
 # Ranger
 mkdir -p "$CONFIG_DST/ranger"
 for f in rc.conf rifle.conf commands.py scope.sh; do
-    [[ -f "$CONFIG_SRC/ranger/$f" ]] && deploy "$CONFIG_SRC/ranger/$f" "$CONFIG_DST/ranger/$f"
+    [[ -f "$CONFIG_SRC/ranger/$f" ]] \
+        && deploy "$CONFIG_SRC/ranger/$f" "$CONFIG_DST/ranger/$f"
 done
 if [[ -d "$CONFIG_SRC/ranger/colorschemes" ]]; then
     mkdir -p "$CONFIG_DST/ranger/colorschemes"
@@ -241,63 +274,86 @@ chmod +x "$CONFIG_DST/ranger/scope.sh" 2>/dev/null || true
 
 # Flameshot — исправляем хардкод /home/amar/
 mkdir -p "$CONFIG_DST/flameshot"
-[[ -f "$CONFIG_SRC/flameshot/flameshot.ini" ]] && \
+if [[ -f "$CONFIG_SRC/flameshot/flameshot.ini" ]]; then
     sed "s|/home/amar/|$HOME/|g" \
-        "$CONFIG_SRC/flameshot/flameshot.ini" > "$CONFIG_DST/flameshot/flameshot.ini" && \
+        "$CONFIG_SRC/flameshot/flameshot.ini" > "$CONFIG_DST/flameshot/flameshot.ini"
     log "  ✓ flameshot.ini (путь: $HOME)"
+fi
 
 # Nitrogen — исправляем хардкод /home/amar/
 mkdir -p "$CONFIG_DST/nitrogen"
 for f in bg-saved.cfg nitrogen.cfg; do
-    [[ -f "$CONFIG_SRC/nitrogen/$f" ]] && \
+    if [[ -f "$CONFIG_SRC/nitrogen/$f" ]]; then
         sed "s|/home/amar/|$HOME/|g" \
-            "$CONFIG_SRC/nitrogen/$f" > "$CONFIG_DST/nitrogen/$f" && \
+            "$CONFIG_SRC/nitrogen/$f" > "$CONFIG_DST/nitrogen/$f"
         log "  ✓ nitrogen/$f (путь: $HOME)"
+    fi
 done
 
-# Polybar
-[[ -f "$CONFIG_SRC/polybar/config.ini" ]] && \
+# Polybar (X11 стек — деплоим если есть)
+if [[ -f "$CONFIG_SRC/polybar/config.ini" ]]; then
     deploy "$CONFIG_SRC/polybar/config.ini" "$CONFIG_DST/polybar/config.ini"
+fi
 if [[ -f "$CONFIG_SRC/polybar/launch.sh" ]]; then
     deploy "$CONFIG_SRC/polybar/launch.sh" "$CONFIG_DST/polybar/launch.sh"
     chmod +x "$CONFIG_DST/polybar/launch.sh"
 fi
 
-# .xinitrc
+# .xinitrc (для DWM/X11 сессии)
 if [[ -f "$REPO_DIR/319/.xinitrc" ]]; then
-    [[ -f ~/.xinitrc ]] && cp ~/.xinitrc ~/.xinitrc.bak.$(date '+%Y%m%d_%H%M%S')
+    [[ -f ~/.xinitrc ]] \
+        && cp ~/.xinitrc ~/.xinitrc.bak.$(date '+%Y%m%d_%H%M%S')
     cp "$REPO_DIR/319/.xinitrc" ~/.xinitrc
     log "  ✓ ~/.xinitrc"
 fi
 
 # =============================================================================
-step "8/8  .bashrc и системные директории"
+step "8/8  .bashrc и рабочие директории"
 
 if [[ -f "$REPO_DIR/319/bashrc_amar319" ]]; then
-    [[ -f ~/.bashrc ]] && cp ~/.bashrc ~/.bashrc.bak.$(date '+%Y%m%d_%H%M%S')
+    [[ -f ~/.bashrc ]] \
+        && cp ~/.bashrc ~/.bashrc.bak.$(date '+%Y%m%d_%H%M%S')
     cp "$REPO_DIR/319/bashrc_amar319" ~/.bashrc
     log "~/.bashrc установлен"
+else
+    warn "319/bashrc_amar319 не найден в репо"
 fi
 
-[[ ! -f ~/.bashrc.local ]] && cat > ~/.bashrc.local << 'EOF'
+if [[ ! -f ~/.bashrc.local ]]; then
+    cat > ~/.bashrc.local << 'EOF'
 # ~/.bashrc.local — машино-специфичные настройки (не в git)
 export SHOW_SYSTEM_INFO=true
 EOF
-log "~/.bashrc.local создан"
+    log "~/.bashrc.local создан"
+fi
 
+# Создаём нужные директории
 mkdir -p ~/Pictures/Wallpapers ~/Screenshots ~/Amar73
-log "Директории ~/Pictures/Wallpapers ~/Screenshots ~/Amar73 готовы"
+log "Директории ~/Pictures/Wallpapers  ~/Screenshots  ~/Amar73 готовы"
+
+# Темы Alacritty (нужны для import в alacritty.toml)
+if [[ ! -d ~/.config/alacritty/themes ]]; then
+    log "Клонирую темы Alacritty..."
+    git clone --depth=1 https://github.com/alacritty/alacritty-theme \
+        ~/.config/alacritty/themes 2>/dev/null \
+        && log "  ✓ Темы Alacritty клонированы" \
+        || warn "  Не удалось клонировать темы — сделай вручную после настройки сети"
+fi
 
 # =============================================================================
 echo
-echo "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
-echo "${GREEN}  Готово! Следующие шаги:${RESET}"
-echo "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+echo "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+echo "${GREEN}  setup.sh завершён!${RESET}"
+echo "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
 echo
-echo "  ${CYAN}exec bash${RESET}                                   # применить .bashrc"
-echo "  ${CYAN}sudo ./319/install_software_wayland.sh --dry-run${RESET}  # план"
-echo "  ${CYAN}sudo ./319/install_software_wayland.sh${RESET}            # установка"
-echo "  ${CYAN}Hyprland${RESET}                                    # запустить WM"
+echo "Следующие шаги:"
+echo "  ${CYAN}exec bash${RESET}                                        # применить .bashrc"
+echo "  ${CYAN}sudo ./319/install_pacman.sh --dry-run${RESET}           # план pacman-пакетов"
+echo "  ${CYAN}sudo ./319/install_pacman.sh${RESET}                     # установить пакеты"
+echo "  ${CYAN}sudo ./319/install_aur.sh --dry-run${RESET}              # план AUR-пакетов"
+echo "  ${CYAN}sudo ./319/install_aur.sh${RESET}                        # установить AUR"
+echo "  ${CYAN}Hyprland${RESET}                                         # запустить WM"
 echo
+echo "Git remote:"
 git remote -v
 echo
