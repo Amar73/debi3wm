@@ -10,7 +10,7 @@
 set -Eeuo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
-HOST="$(hostname)"
+HOST="$(cat /etc/hostname 2>/dev/null || echo "unknown")"
 DRY_RUN=false
 CONFIGS_ONLY=false
 NO_CONFIGS=false
