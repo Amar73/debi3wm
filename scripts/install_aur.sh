@@ -3,9 +3,10 @@
 # install_aur.sh -- установщик AUR-пакетов для Arch Linux
 #
 # Что делает скрипт:
-#   1. Собирает yay из AUR если он ещё не установлен.
-#   2. Проверяет существование каждого пакета в AUR.
-#   3. Устанавливает AUR-пакеты через yay.
+#   1. Читает список пакетов из packages/aur.txt рядом со скриптом.
+#   2. Собирает yay из AUR если он ещё не установлен.
+#   3. Проверяет существование каждого пакета в AUR.
+#   4. Устанавливает AUR-пакеты через yay.
 #
 # Сборка AUR-пакетов всегда выполняется от непривилегированного пользователя --
 # это требование makepkg и базовая мера безопасности.
@@ -13,29 +14,20 @@
 # ИСПОЛЬЗОВАНИЕ:
 #   sudo ./install_aur.sh [опции]
 #
-# БЫСТРЫЙ СТАРТ:
-#   # Сухой прогон -- ничего не меняет, только показывает план:
-#   sudo ./install_aur.sh --dry-run
-#
-#   # Полная установка:
-#   sudo ./install_aur.sh
-#
-#   # Если запускаешь НЕ через sudo (уже root), укажи пользователя явно:
-#   sudo ./install_aur.sh --aur-user username
-#
-# UNATTENDED-РЕЖИМ (CI, автоматизация без интерактивного sudo):
-#   sudo ./install_aur.sh --allow-temp-sudo
-#
 # ОПЦИИ:
 #   --dry-run           Только анализ: показать что будет сделано, без изменений.
-#                       Внимание: пакеты могут попасть в UNKNOWN если yay ещё
-#                       не установлен -- в реальном запуске yay собирается первым.
+#   --pkgs FILE         Путь к файлу со списком AUR-пакетов
+#                       (по умолч.: ../packages/aur.txt рядом со скриптом).
 #   --jobs N            Число параллельных jobs для makepkg (по умолч.: nproc).
 #   --aur-user USER     Пользователь для сборки AUR. Нужен только если скрипт
 #                       запускается напрямую от root, а не через sudo.
 #   --allow-temp-sudo   Выдать пользователю временный NOPASSWD на /usr/bin/pacman.
 #                       Нужно только в unattended-режиме без интерактивного sudo.
 #   -h, --help          Показать эту справку.
+#
+# ФОРМАТ packages/aur.txt:
+#   Один пакет на строку. Строки начинающиеся с # — комментарии, пропускаются.
+#   Пустые строки пропускаются.
 #
 # ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ:
 #   BUILD_JOBS          Альтернатива --jobs (флаг имеет приоритет).
@@ -53,6 +45,7 @@ set -Eeuo pipefail
 # Константы и значения по умолчанию
 # =============================================================================
 
+readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 readonly LOG_FILE="/var/log/install_aur.log"
 readonly TEMP_SUDOERS_FILE="/etc/sudoers.d/99-temp-aur-installer"
 
@@ -60,56 +53,20 @@ DRY_RUN=false
 ALLOW_TEMP_SUDO=false
 BUILD_JOBS="${BUILD_JOBS:-$(nproc)}"
 AUR_USER_CLI=""
+PKGS_FILE="${SCRIPT_DIR}/../packages/aur.txt"
 
 # =============================================================================
-# AUR_PKGS -- пакеты из AUR
-# =============================================================================
-# Проверяются через `yay -Si` (если yay уже есть) или через git ls-remote.
-# Пакеты, которые не удалось проверить заранее, попадают в UNKNOWN и всё равно
-# передаются в yay -- тот выдаст понятную ошибку если пакет не существует.
-
-AUR_PKGS=(
-  # --- Браузеры ---
-  google-chrome
-  yandex-browser
-  brave-bin
-
-  # --- Облако ---
-  yandex-disk
-
-  # --- Текстовые редакторы ---
-  notepadqq
-
-  # --- Почта ---
-  birdtray
-
-  # --- Обои (Wayland, анимация) ---
-  # swww переименован в awww и переехал в official extra — устанавливается через install_software.sh
-
-  # --- Мониторинг ---
-  neohtop
-  lazydocker
-
-  # --- Wayland-утилиты ---
-  xwaylandvideobridge              # Screen-share для XWayland-приложений
-  ydotool                          # Замена xdotool для Wayland (эмуляция ввода)
-
-  # --- Запуск приложений ---
-  walker-bin                       # Расширяемый лаунчер: окна Hyprland, веб-поиск,
-                                   # калькулятор, AI, эмодзи; работает как daemon
-)
-
-# =============================================================================
-# Внутренние переменные состояния (не трогать вручную)
+# Внутренние переменные состояния
 # =============================================================================
 
-TMP_DIR=""          # временный каталог для сборки yay; очищается в cleanup()
-AUR_USER=""         # итоговый пользователь для AUR (определяется в main)
-AUR_HOME=""         # домашний каталог AUR_USER
-AUR_CACHE_DIR=""    # каталог кеша сборки (~/.cache/yay-build)
+AUR_PKGS=()     # заполняется из файла в load_packages()
+
+TMP_DIR=""
+AUR_USER=""
+AUR_HOME=""
+AUR_CACHE_DIR=""
 YAY_AVAILABLE=false
 
-# Массивы результатов классификации (заполняются в split_aur_packages)
 AUR_INSTALLED=()
 AUR_TO_INSTALL=()
 AUR_NOT_FOUND=()
@@ -134,21 +91,17 @@ usage() {
 on_error() {
   local exit_code=$?
   local line_no="${1:-unknown}"
-  # Код 141 = SIGPIPE: возникает когда tee в exec-редиректе получает сигнал
-  # при завершении скрипта. Это ложное срабатывание — игнорируем.
   (( exit_code == 141 )) && return 0
   echo "[ERROR] Сбой на строке ${line_no}, код выхода: ${exit_code}" >&2
   exit "$exit_code"
 }
 
 cleanup() {
-  if [[ -n "${TMP_DIR}" && -d "${TMP_DIR}" ]]; then
-    rm -rf -- "${TMP_DIR}"
-  fi
-  if [[ -f "${TEMP_SUDOERS_FILE}" ]]; then
+  [[ -n "${TMP_DIR}" && -d "${TMP_DIR}" ]] && rm -rf -- "${TMP_DIR}"
+  [[ -f "${TEMP_SUDOERS_FILE}" ]] && {
     log "Удаляю временный sudoers-файл: ${TEMP_SUDOERS_FILE}"
     rm -f -- "${TEMP_SUDOERS_FILE}"
-  fi
+  }
   return 0
 }
 
@@ -156,40 +109,55 @@ trap cleanup EXIT
 trap 'on_error $LINENO' ERR
 
 # =============================================================================
-# Разбор аргументов командной строки
+# Разбор аргументов
 # =============================================================================
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --dry-run)
-      DRY_RUN=true
-      shift
-      ;;
-    --allow-temp-sudo)
-      ALLOW_TEMP_SUDO=true
-      shift
-      ;;
+    --dry-run)         DRY_RUN=true; shift ;;
+    --allow-temp-sudo) ALLOW_TEMP_SUDO=true; shift ;;
+    --pkgs)
+      [[ $# -ge 2 ]] || die "Для --pkgs нужно указать путь к файлу"
+      PKGS_FILE="$2"; shift 2 ;;
     --jobs)
       [[ $# -ge 2 ]] || die "Для --jobs нужно указать число"
       [[ "$2" =~ ^[1-9][0-9]*$ ]] \
         || die "--jobs должен быть положительным числом, получено: '$2'"
-      BUILD_JOBS="$2"
-      shift 2
-      ;;
+      BUILD_JOBS="$2"; shift 2 ;;
     --aur-user)
       [[ $# -ge 2 ]] || die "Для --aur-user нужно указать имя пользователя"
-      AUR_USER_CLI="$2"
-      shift 2
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
-    *)
-      die "Неизвестный аргумент: '$1'. Запусти с --help для справки."
-      ;;
+      AUR_USER_CLI="$2"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) die "Неизвестный аргумент: '$1'. Запусти с --help для справки." ;;
   esac
 done
+
+# =============================================================================
+# Загрузка списка пакетов из файла
+# =============================================================================
+
+load_packages() {
+  local file="$1"
+  local abs_path
+  abs_path="$(realpath "$file" 2>/dev/null || echo "$file")"
+
+  [[ -f "$file" ]] || die "Файл пакетов не найден: ${abs_path}"
+
+  AUR_PKGS=()
+  local line
+  while IFS= read -r line; do
+    line="${line%%#*}"
+    line="${line// /}"
+    line="${line//	/}"
+    [[ -z "$line" ]] && continue
+    AUR_PKGS+=("$line")
+  done < "$file"
+
+  [[ ${#AUR_PKGS[@]} -gt 0 ]] \
+    || die "Файл пакетов пуст или содержит только комментарии: ${abs_path}"
+
+  log "Загружено ${#AUR_PKGS[@]} AUR-пакетов из: ${abs_path}"
+}
 
 # =============================================================================
 # Функции выполнения команд
@@ -197,9 +165,7 @@ done
 
 run_cmd() {
   if $DRY_RUN; then
-    printf '[DRY-RUN] '
-    printf '%q ' "$@"
-    printf '\n'
+    printf '[DRY-RUN] '; printf '%q ' "$@"; printf '\n'
   else
     "$@"
   fi
@@ -215,9 +181,7 @@ run_as_user() {
 
 run_as_user_cmd() {
   if $DRY_RUN; then
-    printf '[DRY-RUN as %s] ' "${AUR_USER}"
-    printf '%q ' "$@"
-    printf '\n'
+    printf '[DRY-RUN as %s] ' "${AUR_USER}"; printf '%q ' "$@"; printf '\n'
   else
     run_as_user "$@"
   fi
@@ -228,18 +192,11 @@ run_as_user_cmd() {
 # =============================================================================
 
 print_list() {
-  local title="$1"
-  shift
-  echo
-  echo "==> ${title}"
-  if [[ $# -eq 0 ]]; then
-    echo "  (пусто)"
-    return 0
-  fi
+  local title="$1"; shift
+  echo; echo "==> ${title}"
+  if [[ $# -eq 0 ]]; then echo "  (пусто)"; return 0; fi
   local item
-  for item in "$@"; do
-    echo "  - $item"
-  done
+  for item in "$@"; do echo "  - $item"; done
 }
 
 is_installed() {
@@ -251,31 +208,25 @@ is_installed() {
 # =============================================================================
 
 grant_temp_sudo() {
-  $DRY_RUN && {
-    log "DRY-RUN: создание временного sudoers-файла пропущено"
-    return 0
-  }
+  $DRY_RUN && { log "DRY-RUN: создание временного sudoers-файла пропущено"; return 0; }
 
-  if [[ -f "${TEMP_SUDOERS_FILE}" ]]; then
+  [[ -f "${TEMP_SUDOERS_FILE}" ]] && {
     warn "Найден старый временный sudoers-файл, удаляю: ${TEMP_SUDOERS_FILE}"
     rm -f -- "${TEMP_SUDOERS_FILE}"
-  fi
+  }
 
   log "Создаю временные права NOPASSWD для пользователя '${AUR_USER}'"
 
   local tmp_sudoers
   tmp_sudoers="$(mktemp /tmp/sudoers-validate.XXXXXX)"
-
   cat > "${tmp_sudoers}" <<EOF
 # Временный файл, создан install_aur.sh. Удаляется автоматически.
 ${AUR_USER} ALL=(root) NOPASSWD: /usr/bin/pacman
 Defaults:${AUR_USER} !requiretty
 EOF
 
-  if ! visudo -cf "${tmp_sudoers}" >/dev/null 2>&1; then
-    rm -f -- "${tmp_sudoers}"
-    die "Синтаксическая ошибка во временном sudoers-файле. Установка прервана."
-  fi
+  visudo -cf "${tmp_sudoers}" >/dev/null 2>&1 \
+    || { rm -f -- "${tmp_sudoers}"; die "Синтаксическая ошибка во временном sudoers-файле."; }
 
   install -m 0440 -o root -g root "${tmp_sudoers}" "${TEMP_SUDOERS_FILE}"
   rm -f -- "${tmp_sudoers}"
@@ -288,8 +239,7 @@ EOF
 
 # Коды возврата: 0 найден / 1 не существует / 2 неизвестно
 aur_exists() {
-  local pkg="$1"
-  local rc=0
+  local pkg="$1" rc=0
 
   if $YAY_AVAILABLE; then
     run_as_user yay -Si "$pkg" >/dev/null 2>&1 || rc=$?
@@ -299,11 +249,8 @@ aur_exists() {
   if command -v git >/dev/null 2>&1; then
     run_as_user git ls-remote \
       "https://aur.archlinux.org/${pkg}.git" HEAD >/dev/null 2>&1 || rc=$?
-    if (( rc == 128 )); then
-      return 1
-    elif (( rc != 0 )); then
-      return 2
-    fi
+    (( rc == 128 )) && return 1
+    (( rc != 0 ))   && return 2
     return 0
   fi
 
@@ -315,34 +262,15 @@ aur_exists() {
 # =============================================================================
 
 split_aur_packages() {
-  AUR_INSTALLED=()
-  AUR_TO_INSTALL=()
-  AUR_NOT_FOUND=()
-  AUR_UNKNOWN=()
+  AUR_INSTALLED=(); AUR_TO_INSTALL=(); AUR_NOT_FOUND=(); AUR_UNKNOWN=()
 
   local pkg rc
   for pkg in "${AUR_PKGS[@]}"; do
-    rc=0
-    aur_exists "$pkg" || rc=$?
-
+    rc=0; aur_exists "$pkg" || rc=$?
     case "$rc" in
-      0)
-        if is_installed "$pkg"; then
-          AUR_INSTALLED+=("$pkg")
-        else
-          AUR_TO_INSTALL+=("$pkg")
-        fi
-        ;;
-      1)
-        AUR_NOT_FOUND+=("$pkg")
-        ;;
-      2|*)
-        if is_installed "$pkg"; then
-          AUR_INSTALLED+=("$pkg")
-        else
-          AUR_UNKNOWN+=("$pkg")
-        fi
-        ;;
+      0) is_installed "$pkg" && AUR_INSTALLED+=("$pkg") || AUR_TO_INSTALL+=("$pkg") ;;
+      1) AUR_NOT_FOUND+=("$pkg") ;;
+      *) is_installed "$pkg" && AUR_INSTALLED+=("$pkg") || AUR_UNKNOWN+=("$pkg") ;;
     esac
   done
 }
@@ -353,11 +281,8 @@ split_aur_packages() {
 
 install_build_prereqs() {
   log "Синхронизирую базы пакетов (pacman -Sy)"
-  # -Sy выполняется всегда, включая dry-run: read-only операция,
-  # нужна для корректной проверки пакетов через git ls-remote.
   pacman -Sy --noconfirm
   log "Устанавливаю git, base-devel (pacman -Su)"
-  log "Это выполнит полное обновление системы — штатное поведение Arch Linux"
   run_cmd pacman -Su --needed --noconfirm git base-devel
 }
 
@@ -372,7 +297,7 @@ install_yay_if_needed() {
   log "yay не найден, выполняю сборку из AUR"
 
   if $DRY_RUN; then
-    log "DRY-RUN: сборка yay пропущена. В реальном запуске yay будет собран первым."
+    log "DRY-RUN: сборка yay пропущена."
     return 0
   fi
 
@@ -393,14 +318,12 @@ install_yay_if_needed() {
     \( -name 'yay-*.pkg.tar.zst' -o -name 'yay-*.pkg.tar.xz' \) \
     -printf '%T@ %p\n' | sort -rn | head -n1 | cut -d' ' -f2-)"
 
-  [[ -n "${pkg_file}" ]] \
-    || die "Не удалось найти собранный пакет yay в ${TMP_DIR}/yay"
+  [[ -n "${pkg_file}" ]] || die "Не удалось найти собранный пакет yay в ${TMP_DIR}/yay"
 
-  log "Устанавливаю yay от root: $(basename "${pkg_file}")"
+  log "Устанавливаю yay: $(basename "${pkg_file}")"
   pacman -U --noconfirm "${pkg_file}"
 
-  command -v yay >/dev/null 2>&1 \
-    || die "yay не обнаружен после установки -- что-то пошло не так"
+  command -v yay >/dev/null 2>&1 || die "yay не обнаружен после установки"
   YAY_AVAILABLE=true
   log "yay успешно установлен: $(yay --version 2>&1 | { read -r line; echo "$line"; })"
 }
@@ -411,9 +334,7 @@ install_yay_if_needed() {
 
 install_aur_packages() {
   local targets=()
-  if (( ${#AUR_TO_INSTALL[@]} > 0 )); then
-    targets+=("${AUR_TO_INSTALL[@]}")
-  fi
+  (( ${#AUR_TO_INSTALL[@]} > 0 )) && targets+=("${AUR_TO_INSTALL[@]}")
 
   if (( ${#AUR_UNKNOWN[@]} > 0 )); then
     warn "Следующие пакеты не удалось проверить заранее (передаю в yay напрямую):"
@@ -427,14 +348,10 @@ install_aur_packages() {
   fi
 
   log "Устанавливаю ${#targets[@]} AUR-пакет(ов) через yay"
-  log "Каталог кеша: ${AUR_CACHE_DIR}"
-  log "Число jobs:   ${BUILD_JOBS}"
 
   run_as_user_cmd mkdir -p "${AUR_CACHE_DIR}"
-
   run_as_user_cmd yay -S \
-    --needed \
-    --noconfirm \
+    --needed --noconfirm \
     --builddir "${AUR_CACHE_DIR}" \
     --norebuild \
     --mflags "-j${BUILD_JOBS}" \
@@ -449,18 +366,15 @@ install_aur_packages() {
 # =============================================================================
 
 verify_aur_packages() {
-  local failed=()
-  local pkg
+  local failed=() pkg
   for pkg in "${AUR_PKGS[@]}"; do
     is_installed "$pkg" || failed+=("$pkg")
   done
-
   if (( ${#failed[@]} > 0 )); then
     warn "Следующие пакеты не установлены после завершения:"
     printf '  - %s\n' "${failed[@]}"
     return 1
   fi
-
   log "Верификация: все AUR-пакеты на месте"
   return 0
 }
@@ -470,52 +384,37 @@ verify_aur_packages() {
 # =============================================================================
 
 main() {
-  [[ $EUID -eq 0 ]] \
-    || die "Скрипт нужно запускать от root (через sudo или напрямую)"
-
-  command -v pacman >/dev/null 2>&1 \
-    || die "pacman не найден. Скрипт предназначен только для Arch Linux."
-
+  [[ $EUID -eq 0 ]] || die "Скрипт нужно запускать от root (через sudo или напрямую)"
+  command -v pacman >/dev/null 2>&1 || die "pacman не найден. Только для Arch Linux."
   [[ ! -e /var/lib/pacman/db.lck ]] \
-    || die "База pacman заблокирована (/var/lib/pacman/db.lck). \
-Убедись, что pacman не запущен, и удали файл блокировки вручную."
+    || die "База pacman заблокирована (/var/lib/pacman/db.lck)."
 
   touch "${LOG_FILE}" 2>/dev/null \
-    || die "Не могу создать лог-файл: ${LOG_FILE}. Проверь права на /var/log/."
-
-  if ! chmod 600 "${LOG_FILE}" 2>/dev/null; then
-    warn "Не удалось установить права 600 на ${LOG_FILE}"
-  fi
+    || die "Не могу создать лог-файл: ${LOG_FILE}."
+  chmod 600 "${LOG_FILE}" 2>/dev/null || warn "Не удалось установить права 600 на ${LOG_FILE}"
 
   exec > >(tee -a "${LOG_FILE}") 2>&1
 
   log "======================================================="
   log "Запуск install_aur.sh -- $(date '+%Y-%m-%d %H:%M:%S')"
   log "======================================================="
-
   $DRY_RUN && log "Режим DRY-RUN: реальных изменений не будет"
 
   # --- Определение пользователя ---
-
   if [[ -n "${AUR_USER_CLI:-}" ]]; then
     AUR_USER="${AUR_USER_CLI}"
   elif [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
     AUR_USER="${SUDO_USER}"
   else
-    die "Не удалось определить пользователя для AUR. \
-Запусти через sudo от обычного пользователя, или укажи --aur-user USERNAME."
+    die "Запусти через sudo от обычного пользователя, или укажи --aur-user USERNAME."
   fi
 
-  [[ "${AUR_USER}" != "root" ]] \
-    || die "Нельзя использовать root. \
-Укажи непривилегированного пользователя через --aur-user."
-
-  id "${AUR_USER}" >/dev/null 2>&1 \
-    || die "Пользователь '${AUR_USER}' не существует в системе."
+  [[ "${AUR_USER}" != "root" ]] || die "Нельзя использовать root для AUR."
+  id "${AUR_USER}" >/dev/null 2>&1 || die "Пользователь '${AUR_USER}' не существует."
 
   AUR_HOME="$(getent passwd "${AUR_USER}" | cut -d: -f6)"
   [[ -n "${AUR_HOME:-}" && -d "${AUR_HOME}" ]] \
-    || die "Домашний каталог пользователя '${AUR_USER}' не найден: '${AUR_HOME}'"
+    || die "Домашний каталог '${AUR_USER}' не найден: '${AUR_HOME}'"
 
   AUR_CACHE_DIR="${AUR_HOME}/.cache/yay-build"
 
@@ -525,54 +424,49 @@ main() {
   log "Лог-файл:          ${LOG_FILE}"
   log "Число jobs:        ${BUILD_JOBS}"
 
-  if [[ -f "${TEMP_SUDOERS_FILE}" ]]; then
-    warn "Найден sudoers-файл от предыдущего запуска, удаляю: ${TEMP_SUDOERS_FILE}"
+  [[ -f "${TEMP_SUDOERS_FILE}" ]] && {
+    warn "Найден sudoers-файл от предыдущего запуска, удаляю."
     rm -f -- "${TEMP_SUDOERS_FILE}"
-  fi
+  }
 
-  # --- Основной процесс ---
+  # 1. Загружаем список пакетов из файла
+  load_packages "${PKGS_FILE}"
 
-  # 1. Временные права sudo если нужны (unattended-режим).
+  # 2. Временные права sudo (unattended-режим)
   $ALLOW_TEMP_SUDO && grant_temp_sudo
 
-  # 2. Обновление системы и prereqs для сборки.
+  # 3. Prereqs
   install_build_prereqs
 
-  # 3. Собираем yay если нет.
+  # 4. yay
   install_yay_if_needed
 
-  # 4. Классифицируем пакеты.
+  # 5. Классификация
   split_aur_packages
 
   print_list "AUR: уже установлены"   "${AUR_INSTALLED[@]+"${AUR_INSTALLED[@]}"}"
   print_list "AUR: будут установлены" "${AUR_TO_INSTALL[@]+"${AUR_TO_INSTALL[@]}"}"
   print_list "AUR: НЕ НАЙДЕНЫ"        "${AUR_NOT_FOUND[@]+"${AUR_NOT_FOUND[@]}"}"
-  print_list "AUR: статус неизвестен (будут переданы в yay)" \
-    "${AUR_UNKNOWN[@]+"${AUR_UNKNOWN[@]}"}"
+  print_list "AUR: статус неизвестен" "${AUR_UNKNOWN[@]+"${AUR_UNKNOWN[@]}"}"
   echo
 
   if (( ${#AUR_NOT_FOUND[@]} > 0 )); then
-    die "Обнаружены несуществующие пакеты (см. выше). \
-Исправь список AUR_PKGS и запусти снова."
+    die "Обнаружены несуществующие пакеты. Исправь packages/aur.txt и запусти снова."
   fi
 
-  # 5. Устанавливаем.
+  # 6. Установка
   install_aur_packages
 
-  # --- Финальная верификация ---
-
+  # 7. Верификация
   if ! $DRY_RUN; then
     verify_aur_packages \
-      || die "Верификация не прошла: часть пакетов не установлена. \
-Проверь лог: ${LOG_FILE}"
-
+      || die "Верификация не прошла. Проверь лог: ${LOG_FILE}"
     log "======================================================="
     log "Завершено успешно -- $(date '+%Y-%m-%d %H:%M:%S')"
     log "======================================================="
   else
     log "======================================================="
-    log "DRY-RUN завершён. Реальных изменений не было."
-    log "Для запуска установки уберите флаг --dry-run."
+    log "DRY-RUN завершён. Для установки уберите флаг --dry-run."
     log "======================================================="
   fi
 }
