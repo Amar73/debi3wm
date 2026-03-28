@@ -12,7 +12,8 @@ brave-bin
 yandex-disk
 
 # --- Текстовые редакторы ---
-notepadqq
+# notepadqq — заброшен с 2021, заменён на kate
+kate                           # Мощный редактор от KDE, активно поддерживается
 
 # --- Почта ---
 birdtray
@@ -27,3 +28,7 @@ ydotool
 
 # --- Запуск приложений ---
 walker-bin
+
+# --- Hyprland — управление сессией и информация ---
+wlogout                        # Меню выхода/перезагрузки/выключения
+hyprsysteminfo                 # Графический neofetch для Hyprland

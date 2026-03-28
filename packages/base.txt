@@ -18,6 +18,8 @@ hyprpaper
 awww                           # Обои с анимацией (gif); ex-swww
 hyprlock
 hypridle
+hyprpicker                     # Цветовая пипетка
+hyprsunset                     # Фильтр синего света (аналог redshift для Wayland)
 waybar
 wlr-randr
 kanshi
@@ -48,7 +50,7 @@ playerctl
 # --- Системные компоненты ---
 base-devel
 accountsservice
-polkit-gnome
+hyprpolkitagent                # Нативный polkit-агент для Hyprland (замена polkit-gnome)
 xdg-utils
 xdg-user-dirs
 openssh
@@ -68,10 +70,11 @@ nm-connection-editor
 # --- Терминалы ---
 alacritty
 kitty
+foot                           # Лёгкий Wayland-native терминал
 
 # --- Файловые менеджеры ---
 mc
-ranger
+yazi                           # TUI на Rust: быстрее ranger, preview прямо в терминале
 nautilus
 gnome-disk-utility
 
