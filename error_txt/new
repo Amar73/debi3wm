@@ -1,13 +1,20 @@
-00:08:47 amar@amar319air1:~$ hyprlock --version
-Hyprlock version v0.9.3
-00:09:06 amar@amar319air1:~$ localectl status
-System Locale: LANG=en_US.UTF-8
-               LC_TIME=ru_RU.UTF-8
-               LC_COLLATE=C
-    VC Keymap: (unset)
-   X11 Layout: (unset)
-00:09:21 amar@amar319air1:~$ cat /etc/vconsole.conf
-KEYMAP=su
-FONT=cyr-sun16
-00:09:42 amar@amar319air1:~$ ls /etc/X11/
- xinit
+{
+  "name": "power-button",
+  "active_keymap": "English (US)"
+}
+{
+  "name": "video-bus",
+  "active_keymap": "English (US)"
+}
+{
+  "name": "power-button-1",
+  "active_keymap": "English (US)"
+}
+{
+  "name": "sleep-button",
+  "active_keymap": "English (US)"
+}
+{
+  "name": "apple-inc.-apple-internal-keyboard-/-trackpad",
+  "active_keymap": "English (US)"
+}
