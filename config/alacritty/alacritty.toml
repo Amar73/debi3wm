@@ -1,0 +1,74 @@
+[general]
+import = [
+  "~/.config/alacritty/themes/themes/rainbow.toml"
+]
+
+[font]
+size = 14
+
+  [font.bold]
+  family = "JetBrainsMono Nerd Font"
+  style = "Heavy"
+
+  [font.bold_italic]
+  family = "JetBrainsMono Nerd Font"
+  style = "Heavy Italic"
+
+  [font.italic]
+  family = "JetBrainsMono Nerd Font"
+  style = "Medium Italic"
+
+  [font.normal]
+  family = "JetBrainsMono Nerd Font"
+  style = "Medium"
+
+[[keyboard.bindings]]
+key = "N"
+mods = "Control|Shift"
+action = "CreateNewWindow"
+
+[[keyboard.bindings]]
+key = "K"
+mods = "Control|Shift"
+chars = """
+reset
+"""
+
+[[keyboard.bindings]]
+key = "L"
+mods = "Control|Shift"
+chars = "l"
+
+[window]
+decorations = "buttonless"
+opacity = 0.5
+blur = false
+dynamic_padding = false
+dynamic_title = true
+
+  [window.padding]
+  x = 25
+  y = 20
+
+[cursor]
+blink_interval = 500
+blink_timeout = 0
+thickness = 0.4
+
+  [cursor.style]
+  shape = "Underline"
+  blinking = "On"
+
+[selection]
+save_to_clipboard = true
+
+[scrolling]
+history = 10_000
+
+[[mouse.bindings]]
+mouse = "Right"
+action = "Paste"
+
+[env]
+TERM = "xterm-256color"
+WINIT_X11_SCALE_FACTOR = "1.0"
