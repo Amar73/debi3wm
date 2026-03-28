@@ -18,6 +18,7 @@ hyprpaper
 awww                           # Обои с анимацией (gif); ex-swww
 hyprlock
 hypridle
+nwg-look
 hyprpicker                     # Цветовая пипетка
 hyprsunset                     # Фильтр синего света (аналог redshift для Wayland)
 waybar
