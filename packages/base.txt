@@ -129,3 +129,4 @@ dysk
 
 # --- Docker ---
 docker
+inetutils                      # hostname, ftp, telnet и др.
