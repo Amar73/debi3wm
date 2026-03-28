@@ -52,7 +52,7 @@ install_packages() {
     $($DRY_RUN && echo "--dry-run")
 
   log "--- Установка AUR-пакетов ---"
-  dryrun sudo bash "$REPO_DIR/scripts/install_aur.sh" \
+  dryrun sudo bash "$REPO_DIR/scripts/install_aur.sh" --aur-user "$TARGET_USER" \
     $($DRY_RUN && echo "--dry-run")
 }
 
