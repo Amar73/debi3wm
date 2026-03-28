@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # =============================================================================
 # install.sh — точка входа для развёртывания системы
-# Использование:
+#
+# ИСПОЛЬЗОВАНИЕ:
 #   sudo ./install.sh              — полная установка
 #   sudo ./install.sh --dry-run    — только показать план
 #   sudo ./install.sh --configs-only
@@ -10,7 +11,9 @@
 set -Eeuo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
-HOST="$(cat /etc/hostname 2>/dev/null || echo "unknown")"
+HOST="$(cat /etc/hostname 2>/dev/null | tr -d '[:space:]' || echo "unknown")"
+readonly LOG_FILE="/var/log/install.log"
+
 DRY_RUN=false
 CONFIGS_ONLY=false
 NO_CONFIGS=false
@@ -38,9 +41,18 @@ TARGET_USER="${SUDO_USER:-}"
   || die "Запускай через sudo от обычного пользователя"
 TARGET_HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6)"
 
+# Пишем всё в лог
+touch "${LOG_FILE}" 2>/dev/null || true
+chmod 600 "${LOG_FILE}" 2>/dev/null || true
+exec > >(tee -a "${LOG_FILE}") 2>&1
+
+log "======================================================="
+log "Запуск install.sh — $(date '+%Y-%m-%d %H:%M:%S')"
+log "======================================================="
 log "Хост:       $HOST"
 log "Юзер:       $TARGET_USER"
 log "Домашний:   $TARGET_HOME"
+log "Лог-файл:   $LOG_FILE"
 $DRY_RUN && log "Режим:      DRY-RUN"
 
 # =============================================================================
@@ -48,19 +60,19 @@ $DRY_RUN && log "Режим:      DRY-RUN"
 # =============================================================================
 install_packages() {
   log "--- Установка пакетов (pacman) ---"
-  dryrun sudo bash "$REPO_DIR/scripts/install_pacman.sh" \
-    $($DRY_RUN && echo "--dry-run")
+  bash "$REPO_DIR/scripts/install_pacman.sh" \
+    $($DRY_RUN && echo "--dry-run" || true)
 
   log "--- Установка AUR-пакетов ---"
-  dryrun sudo bash "$REPO_DIR/scripts/install_aur.sh" --aur-user "$TARGET_USER" \
-    $($DRY_RUN && echo "--dry-run")
+  bash "$REPO_DIR/scripts/install_aur.sh" \
+    --aur-user "$TARGET_USER" \
+    $($DRY_RUN && echo "--dry-run" || true)
 }
 
 # =============================================================================
 # Deploy конфигов
 # =============================================================================
 
-# Копировать файл с бэкапом существующего
 deploy_file() {
   local src="$1" dst="$2" mode="${3:-644}"
   if $DRY_RUN; then
@@ -99,10 +111,14 @@ deploy_configs() {
     ssh_src="$cfg/ssh/config.${HOST}"
   elif [[ "$HOST" == amar319* && -f "$cfg/ssh/config.amar319" ]]; then
     ssh_src="$cfg/ssh/config.amar319"
+  elif [[ "$HOST" == amar224* && -f "$cfg/ssh/config.amar224" ]]; then
+    ssh_src="$cfg/ssh/config.amar224"
   else
     warn "ssh/config для хоста '$HOST' не найден, пропускаю"
   fi
   if [[ -n "$ssh_src" ]]; then
+    mkdir -p "$TARGET_HOME/.ssh"
+    chmod 700 "$TARGET_HOME/.ssh"
     deploy_file "$ssh_src" "$TARGET_HOME/.ssh/config" "600"
     log "  $ssh_src → ~/.ssh/config"
   fi
@@ -113,18 +129,20 @@ deploy_configs() {
     mon_src="$cfg/hypr/monitors/${HOST}.conf"
   elif [[ "$HOST" == amar319* && -f "$cfg/hypr/monitors/amar319.conf" ]]; then
     mon_src="$cfg/hypr/monitors/amar319.conf"
+  elif [[ "$HOST" == amar224* && -f "$cfg/hypr/monitors/amar224.conf" ]]; then
+    mon_src="$cfg/hypr/monitors/amar224.conf"
   else
     mon_src="$cfg/hypr/monitors/default.conf"
+    warn "Монитор-конфиг для '$HOST' не найден, использую default.conf"
   fi
   deploy_file "$mon_src" "$TARGET_HOME/.config/hypr/monitors.conf" "644"
   log "  $mon_src → ~/.config/hypr/monitors.conf"
 
   # Hyprland общий конфиг
-  deploy_file "$cfg/hypr/hyprland.conf" \
-    "$TARGET_HOME/.config/hypr/hyprland.conf"
+  deploy_file "$cfg/hypr/hyprland.conf" "$TARGET_HOME/.config/hypr/hyprland.conf"
   log "  hyprland.conf → ~/.config/hypr/"
 
-  # Остальные конфиги — деплоятся как есть
+  # Остальные конфиги
   local -A app_configs=(
     [alacritty]="$TARGET_HOME/.config/alacritty"
     [dunst]="$TARGET_HOME/.config/dunst"
@@ -150,6 +168,7 @@ deploy_configs() {
 # Post-install скрипты
 # =============================================================================
 run_post_install() {
+  log "--- Post-install ---"
   local found=false
   for s in "$REPO_DIR/post-install"/*.sh; do
     [[ -f "$s" ]] || continue
@@ -161,12 +180,43 @@ run_post_install() {
 }
 
 # =============================================================================
+# Сводка ошибок и предупреждений
+# =============================================================================
+summary() {
+  local logs=(
+    /var/log/install.log
+    /var/log/install_pacman.log
+    /var/log/install_aur.log
+  )
+  echo ""
+  log "--- Сводка проблем ---"
+  local found=false
+  for f in "${logs[@]}"; do
+    [[ -f "$f" ]] || continue
+    local hits
+    hits="$(grep -E '\[(ERROR|WARN)\]' "$f" 2>/dev/null || true)"
+    if [[ -n "$hits" ]]; then
+      found=true
+      echo "  >>> $f"
+      echo "$hits" | sed 's/^/    /'
+    fi
+  done
+  if $found; then
+    warn "Есть предупреждения/ошибки — полные логи в /var/log/install*.log"
+  else
+    log "Проблем не обнаружено"
+  fi
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 $CONFIGS_ONLY || install_packages
 $NO_CONFIGS   || deploy_configs
 
-log "--- Post-install ---"
 run_post_install
+summary
 
-log "Готово. Хост: $HOST"
+log "======================================================="
+log "Готово. Хост: $HOST — $(date '+%Y-%m-%d %H:%M:%S')"
+log "======================================================="

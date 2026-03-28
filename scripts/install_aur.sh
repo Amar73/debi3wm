@@ -3,40 +3,29 @@
 # install_aur.sh -- установщик AUR-пакетов для Arch Linux
 #
 # Что делает скрипт:
-#   1. Читает список пакетов из packages/aur.txt рядом со скриптом.
+#   1. Читает список пакетов из packages/aur.txt.
 #   2. Собирает yay из AUR если он ещё не установлен.
 #   3. Проверяет существование каждого пакета в AUR.
 #   4. Устанавливает AUR-пакеты через yay.
-#
-# Сборка AUR-пакетов всегда выполняется от непривилегированного пользователя --
-# это требование makepkg и базовая мера безопасности.
 #
 # ИСПОЛЬЗОВАНИЕ:
 #   sudo ./install_aur.sh [опции]
 #
 # ОПЦИИ:
-#   --dry-run           Только анализ: показать что будет сделано, без изменений.
-#   --pkgs FILE         Путь к файлу со списком AUR-пакетов
-#                       (по умолч.: ../packages/aur.txt рядом со скриптом).
-#   --jobs N            Число параллельных jobs для makepkg (по умолч.: nproc).
-#   --aur-user USER     Пользователь для сборки AUR. Нужен только если скрипт
-#                       запускается напрямую от root, а не через sudo.
-#   --allow-temp-sudo   Выдать пользователю временный NOPASSWD на /usr/bin/pacman.
-#                       Нужно только в unattended-режиме без интерактивного sudo.
+#   --dry-run           Только анализ, без изменений.
+#   --pkgs FILE         Путь к файлу пакетов (по умолч.: ../packages/aur.txt).
+#   --jobs N            Число parallel jobs для makepkg (по умолч.: nproc).
+#   --aur-user USER     Пользователь для сборки AUR.
+#   --allow-temp-sudo   Временный NOPASSWD для unattended-режима.
 #   -h, --help          Показать эту справку.
 #
 # ФОРМАТ packages/aur.txt:
-#   Один пакет на строку. Строки начинающиеся с # — комментарии, пропускаются.
-#   Пустые строки пропускаются.
-#
-# ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ:
-#   BUILD_JOBS          Альтернатива --jobs (флаг имеет приоритет).
+#   Один пакет на строку. Строки с # — комментарии, пропускаются.
 #
 # ТРЕБОВАНИЯ:
 #   - Arch Linux с pacman
 #   - Запуск от root (через sudo)
 #   - Доступ в интернет
-#   - git и base-devel (устанавливаются автоматически если отсутствуют)
 # =============================================================================
 
 set -Eeuo pipefail
@@ -73,7 +62,7 @@ AUR_NOT_FOUND=()
 AUR_UNKNOWN=()
 
 # =============================================================================
-# Вспомогательные функции вывода
+# Вспомогательные функции
 # =============================================================================
 
 log()  { echo "[INFO]  $*"; }
@@ -122,7 +111,7 @@ while [[ $# -gt 0 ]]; do
     --jobs)
       [[ $# -ge 2 ]] || die "Для --jobs нужно указать число"
       [[ "$2" =~ ^[1-9][0-9]*$ ]] \
-        || die "--jobs должен быть положительным числом, получено: '$2'"
+        || die "--jobs должен быть положительным числом: '$2'"
       BUILD_JOBS="$2"; shift 2 ;;
     --aur-user)
       [[ $# -ge 2 ]] || die "Для --aur-user нужно указать имя пользователя"
@@ -215,8 +204,7 @@ grant_temp_sudo() {
     rm -f -- "${TEMP_SUDOERS_FILE}"
   }
 
-  log "Создаю временные права NOPASSWD для пользователя '${AUR_USER}'"
-
+  log "Создаю временные права NOPASSWD для '${AUR_USER}'"
   local tmp_sudoers
   tmp_sudoers="$(mktemp /tmp/sudoers-validate.XXXXXX)"
   cat > "${tmp_sudoers}" <<EOF
@@ -224,10 +212,8 @@ grant_temp_sudo() {
 ${AUR_USER} ALL=(root) NOPASSWD: /usr/bin/pacman
 Defaults:${AUR_USER} !requiretty
 EOF
-
   visudo -cf "${tmp_sudoers}" >/dev/null 2>&1 \
     || { rm -f -- "${tmp_sudoers}"; die "Синтаксическая ошибка во временном sudoers-файле."; }
-
   install -m 0440 -o root -g root "${tmp_sudoers}" "${TEMP_SUDOERS_FILE}"
   rm -f -- "${tmp_sudoers}"
   log "Временный sudoers-файл установлен: ${TEMP_SUDOERS_FILE}"
@@ -240,12 +226,10 @@ EOF
 # Коды возврата: 0 найден / 1 не существует / 2 неизвестно
 aur_exists() {
   local pkg="$1" rc=0
-
   if $YAY_AVAILABLE; then
     run_as_user yay -Si "$pkg" >/dev/null 2>&1 || rc=$?
     return "$rc"
   fi
-
   if command -v git >/dev/null 2>&1; then
     run_as_user git ls-remote \
       "https://aur.archlinux.org/${pkg}.git" HEAD >/dev/null 2>&1 || rc=$?
@@ -253,7 +237,6 @@ aur_exists() {
     (( rc != 0 ))   && return 2
     return 0
   fi
-
   return 2
 }
 
@@ -263,7 +246,6 @@ aur_exists() {
 
 split_aur_packages() {
   AUR_INSTALLED=(); AUR_TO_INSTALL=(); AUR_NOT_FOUND=(); AUR_UNKNOWN=()
-
   local pkg rc
   for pkg in "${AUR_PKGS[@]}"; do
     rc=0; aur_exists "$pkg" || rc=$?
@@ -308,14 +290,17 @@ install_yay_if_needed() {
   run_as_user git clone --depth=1 https://aur.archlinux.org/yay.git "${TMP_DIR}/yay"
 
   log "Собираю yay (jobs: ${BUILD_JOBS})"
+  # MAKEFLAGS через env — надёжнее чем --mflags в новых версиях makepkg
   run_as_user env \
     MAKEFLAGS="-j${BUILD_JOBS}" \
     BUILDDIR="${AUR_CACHE_DIR}" \
-    bash -c "cd $(printf '%q' "${TMP_DIR}/yay") && makepkg -s --noconfirm --needed"
+    bash -c "cd $(printf '%q' "${TMP_DIR}/yay") && makepkg -si --noconfirm --needed"
 
+  # Ищем yay пакет, исключая yay-debug
   local pkg_file=""
   pkg_file="$(find "${TMP_DIR}/yay" -maxdepth 1 -type f \
-    \( -name 'yay-*.pkg.tar.zst' -o -name 'yay-*.pkg.tar.xz' \) ! -name 'yay-debug*' \
+    \( -name 'yay-*.pkg.tar.zst' -o -name 'yay-*.pkg.tar.xz' \) \
+    ! -name 'yay-debug*' \
     -printf '%T@ %p\n' | sort -rn | head -n1 | cut -d' ' -f2-)"
 
   [[ -n "${pkg_file}" ]] || die "Не удалось найти собранный пакет yay в ${TMP_DIR}/yay"
@@ -348,13 +333,17 @@ install_aur_packages() {
   fi
 
   log "Устанавливаю ${#targets[@]} AUR-пакет(ов) через yay"
+  log "MAKEFLAGS: -j${BUILD_JOBS}"
 
   run_as_user_cmd mkdir -p "${AUR_CACHE_DIR}"
-  run_as_user_cmd yay -S \
-    --needed --noconfirm \
+
+  # MAKEFLAGS через env, не через --mflags (ломает новые версии yay/makepkg)
+  run_as_user_cmd env MAKEFLAGS="-j${BUILD_JOBS}" \
+    yay -S \
+    --needed \
+    --noconfirm \
     --builddir "${AUR_CACHE_DIR}" \
     --norebuild \
-    --mflags "-j${BUILD_JOBS}" \
     --answerclean None \
     --answerdiff None \
     --answeredit None \
@@ -389,9 +378,9 @@ main() {
   [[ ! -e /var/lib/pacman/db.lck ]] \
     || die "База pacman заблокирована (/var/lib/pacman/db.lck)."
 
-  touch "${LOG_FILE}" 2>/dev/null \
-    || die "Не могу создать лог-файл: ${LOG_FILE}."
-  chmod 600 "${LOG_FILE}" 2>/dev/null || warn "Не удалось установить права 600 на ${LOG_FILE}"
+  touch "${LOG_FILE}" 2>/dev/null || die "Не могу создать лог-файл: ${LOG_FILE}."
+  chmod 600 "${LOG_FILE}" 2>/dev/null \
+    || warn "Не удалось установить права 600 на ${LOG_FILE}"
 
   exec > >(tee -a "${LOG_FILE}") 2>&1
 
@@ -429,7 +418,7 @@ main() {
     rm -f -- "${TEMP_SUDOERS_FILE}"
   }
 
-  # 1. Загружаем список пакетов из файла
+  # 1. Загружаем список пакетов из файла (не из массива!)
   load_packages "${PKGS_FILE}"
 
   # 2. Временные права sudo (unattended-режим)
@@ -451,7 +440,7 @@ main() {
   echo
 
   if (( ${#AUR_NOT_FOUND[@]} > 0 )); then
-    die "Обнаружены несуществующие пакеты. Исправь packages/aur.txt и запусти снова."
+    warn "Обнаружены несуществующие пакеты (см. выше). Они будут пропущены."
   fi
 
   # 6. Установка
@@ -460,9 +449,9 @@ main() {
   # 7. Верификация
   if ! $DRY_RUN; then
     verify_aur_packages \
-      || die "Верификация не прошла. Проверь лог: ${LOG_FILE}"
+      || warn "Часть пакетов не установлена. Проверь лог: ${LOG_FILE}"
     log "======================================================="
-    log "Завершено успешно -- $(date '+%Y-%m-%d %H:%M:%S')"
+    log "Завершено -- $(date '+%Y-%m-%d %H:%M:%S')"
     log "======================================================="
   else
     log "======================================================="
