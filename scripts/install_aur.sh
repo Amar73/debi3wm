@@ -315,7 +315,7 @@ install_yay_if_needed() {
 
   local pkg_file=""
   pkg_file="$(find "${TMP_DIR}/yay" -maxdepth 1 -type f \
-    ( -name 'yay-*.pkg.tar.zst' -o -name 'yay-*.pkg.tar.xz' ) ! -name 'yay-debug*' \
+    \( -name 'yay-*.pkg.tar.zst' -o -name 'yay-*.pkg.tar.xz' \) ! -name 'yay-debug*' \
     -printf '%T@ %p\n' | sort -rn | head -n1 | cut -d' ' -f2-)"
 
   [[ -n "${pkg_file}" ]] || die "Не удалось найти собранный пакет yay в ${TMP_DIR}/yay"
