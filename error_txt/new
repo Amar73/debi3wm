@@ -1,4 +1,33 @@
-21:38:25 amar@amar319air1:~$ waybar
-[2026-03-28 21:38:31.545] [info] Using configuration file /home/amar/.config/waybar/config.jsonc
-[2026-03-28 21:38:31.550] [info] Using CSS file /home/amar/.config/waybar/style.css
-[2026-03-28 21:38:31.551] [error] style.css:130:14'var' is not a valid color name
+21:55:22 amar@amar319air1:~/setup$ waybar
+[2026-03-28 21:55:32.925] [info] Using configuration file /home/amar/.config/waybar/config.jsonc
+[2026-03-28 21:55:32.930] [info] Using CSS file /home/amar/.config/waybar/style.css
+[2026-03-28 21:55:32.940] [info] Hyprland IPC starting
+[2026-03-28 21:55:32.944] [info] Loading persistent workspaces from Hyprland workspace rules
+sh: line 1: /home/amar/.config/waybar/scripts/updates.sh: Permission denied
+sh: line 1: /home/amar/.config/waybar/scripts/cpu-bar.sh: Permission denied
+sh: line 1: /home/amar/.config/waybar/scripts/keyboard.sh: Permission denied
+Full
+[2026-03-28 21:55:33.042] [info] Bar configured (width: 1430, height: 30) for output: eDP-1
+
+** (waybar:2386): WARNING **: 21:55:33.046: Status Notifier Item with bus name ':1.39' and object path '/org/ayatana/NotificationItem/nm_applet' is already registered
+sh: line 1: /home/amar/.config/waybar/scripts/keyboard.sh: Permission denied
+sh: line 1: /home/amar/.config/waybar/scripts/cpu-bar.sh: Permission denied
+sh: line 1: /home/amar/.config/waybar/scripts/keyboard.sh: Permission denied
+sh: line 1: /home/amar/.config/waybar/scripts/keyboard.sh: Permission denied
+sh: line 1: /home/amar/.config/waybar/scripts/cpu-bar.sh: Permission denied
+sh: line 1: /home/amar/.config/waybar/scripts/keyboard.sh: Permission denied
+sh: line 1: /home/amar/.config/waybar/scripts/keyboard.sh: Permission denied
+sh: line 1: /home/amar/.config/waybar/scripts/cpu-bar.sh: Permission denied
+sh: line 1: /home/amar/.config/waybar/scripts/keyboard.sh: Permission denied
+sh: line 1: /home/amar/.config/waybar/scripts/keyboard.sh: Permission denied
+sh: line 1: /home/amar/.config/waybar/scripts/cpu-bar.sh: Permission denied
+sh: line 1: /home/amar/.config/waybar/scripts/keyboard.sh: Permission denied
+sh: line 1: /home/amar/.config/waybar/scripts/keyboard.sh: Permission denied
+sh: line 1: /home/amar/.config/waybar/scripts/cpu-bar.sh: Permission denied
+sh: line 1: /home/amar/.config/waybar/scripts/keyboard.sh: Permission denied
+sh: line 1: /home/amar/.config/waybar/scripts/keyboard.sh: Permission denied
+sh: line 1: /home/amar/.config/waybar/scripts/cpu-bar.sh: Permission denied
+sh: line 1: /home/amar/.config/waybar/scripts/keyboard.sh: Permission denied
+sh: line 1: /home/amar/.config/waybar/scripts/keyboard.sh: Permission denied
+^C[2026-03-28 21:55:46.535] [info] Quitting.
+[2026-03-28 21:55:46.542] [info] Hyprland IPC stopping...
