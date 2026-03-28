@@ -5,7 +5,6 @@
 
 # --- Браузеры ---
 google-chrome
-yandex-browser
 brave-bin
 
 # --- Облако ---
