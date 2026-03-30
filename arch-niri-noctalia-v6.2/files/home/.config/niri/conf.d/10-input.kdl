@@ -1,0 +1,20 @@
+input {
+    keyboard {
+        xkb {
+            file "~/.config/niri/conf.d/keymap.xkb"
+        }
+        track-layout "global"
+        repeat-delay 250
+        repeat-rate 35
+        numlock
+    }
+
+    touchpad {
+        tap
+        natural-scroll
+        dwt
+        accel-speed 0.3
+    }
+
+    focus-follows-mouse
+}

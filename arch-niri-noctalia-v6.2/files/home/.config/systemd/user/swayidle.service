@@ -1,0 +1,16 @@
+[Unit]
+Description=Swayidle
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/swayidle -w \
+  timeout 300 '/usr/bin/swaylock -f' \
+  timeout 900 '/usr/bin/systemctl suspend' \
+  before-sleep '/usr/bin/swaylock -f'
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

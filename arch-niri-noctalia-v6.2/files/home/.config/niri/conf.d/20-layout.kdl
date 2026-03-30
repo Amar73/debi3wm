@@ -1,0 +1,17 @@
+layout {
+    gaps 8
+    center-focused-column "never"
+
+    default-column-width {
+        proportion 0.50
+    }
+
+    preset-column-widths {
+        proportion 0.33
+        proportion 0.50
+        proportion 0.67
+        proportion 1.00
+    }
+}
+
+prefer-no-csd

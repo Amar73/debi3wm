@@ -1,0 +1,39 @@
+arch-niri-noctalia/
+├── README.md
+├── Makefile
+├── install.sh
+├── post-install-check.sh
+├── sync.sh
+├── logs.sh
+├── backup.sh
+├── bootstrap-dotfiles.sh
+└── files/
+    ├── etc/
+    │   └── greetd/
+    │       └── config.toml
+    └── home/
+        └── .config/
+            ├── niri/
+            │   ├── config.kdl
+            │   └── conf.d/
+            │       ├── 10-input.kdl
+            │       ├── 20-layout.kdl
+            │       ├── 30-environment.kdl
+            │       ├── 40-startup.kdl
+            │       ├── 50-binds.kdl
+            │       └── keymap.xkb
+            ├── mako/
+            │   └── config
+            ├── fuzzel/
+            │   └── fuzzel.ini
+            ├── qt6ct/
+            │   └── qt6ct.conf
+            ├── gtk-3.0/
+            │   └── settings.ini
+            ├── gtk-4.0/
+            │   └── settings.ini
+            └── systemd/
+                └── user/
+                    ├── noctalia.service
+                    ├── swayidle.service
+                    └── cliphist.service
